@@ -4,9 +4,46 @@ import { cookies } from "next/headers";
 import { BoutonTheme } from "@/components/BoutonTheme";
 import { COOKIE_THEME, lireTheme } from "@/lib/theme";
 import { listerUtilisateurs } from "@/lib/db";
+import { oidcConfigure } from "@/lib/oidc";
 
-export default async function Connexion() {
+const MESSAGES_ERREUR: Record<string, string> = {
+  expire: "La connexion a expiré, merci de réessayer.",
+  echec: "La connexion a échoué. Merci de réessayer.",
+  inconnu:
+    "Ce compte universitaire n'est pas encore configuré dans Folio GEA. Contactez l'administrateur pour qu'il vous ajoute (ou importe votre promotion).",
+};
+
+export default async function Connexion(props: PageProps<"/connexion">) {
   await connection();
+  const { erreur } = await props.searchParams;
+  const theme = lireTheme((await cookies()).get(COOKIE_THEME)?.value);
+
+  if (oidcConfigure()) {
+    return (
+      <main className="mx-auto w-full max-w-md px-4 py-24 sm:px-6">
+        <div className="mb-8 flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-lg bg-primary text-lg font-bold text-white">F</span>
+          <div>
+            <h1 className="text-2xl font-semibold">Folio GEA</h1>
+            <p className="text-sm text-muted">Portfolio de compétences du BUT GEA</p>
+          </div>
+          <div className="ml-auto">
+            <BoutonTheme initial={theme} />
+          </div>
+        </div>
+        {typeof erreur === "string" && MESSAGES_ERREUR[erreur] && (
+          <p className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{MESSAGES_ERREUR[erreur]}</p>
+        )}
+        <a
+          href="/connexion/oidc"
+          className="block w-full rounded-lg bg-primary px-4 py-3 text-center font-medium text-white hover:opacity-90"
+        >
+          Se connecter avec le compte de l&apos;université
+        </a>
+      </main>
+    );
+  }
+
   const utilisateurs = await listerUtilisateurs();
   const enseignants = utilisateurs.filter((u) => u.role !== "etudiant");
   const etudiants = utilisateurs.filter((u) => u.role === "etudiant");
@@ -20,13 +57,14 @@ export default async function Connexion() {
           <p className="text-sm text-muted">Portfolio de compétences du BUT GEA</p>
         </div>
         <div className="ml-auto">
-          <BoutonTheme initial={lireTheme((await cookies()).get(COOKIE_THEME)?.value)} />
+          <BoutonTheme initial={theme} />
         </div>
       </div>
 
       <div className="mb-8 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <strong>Mode démonstration.</strong> La connexion avec les identifiants de l&apos;université (CAS) sera
-        branchée à une étape ultérieure. Choisissez un compte fictif pour tester l&apos;outil.
+        <strong>Mode démonstration.</strong> La connexion avec les identifiants de l&apos;université (OpenID Connect) sera
+        branchée une fois les réglages reçus de la DSI (voir <code>OIDC_ISSUER</code> dans <code>.env.example</code>).
+        Choisissez un compte fictif pour tester l&apos;outil.
       </div>
 
       <form action={seConnecter} className="space-y-8">

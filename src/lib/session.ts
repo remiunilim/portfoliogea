@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { getUtilisateur, type Utilisateur } from "./db";
 
-// Connexion simulée pour la V1 : un cookie contient l'identifiant de l'utilisateur choisi.
-// Sera remplacée par le CAS de l'université (identifiants ENT) à l'étape « connexion ».
+// Le cookie contient l'identifiant de l'utilisateur, qu'il vienne du choix d'un compte fictif
+// (mode démonstration, `/connexion`) ou d'une vraie connexion SSO (`/connexion/oidc/callback`).
 export const COOKIE_SESSION = "folio_utilisateur";
 
 export async function utilisateurCourant(): Promise<Utilisateur | null> {

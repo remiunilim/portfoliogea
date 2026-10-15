@@ -24,6 +24,9 @@ export type Utilisateur = {
   actif: number;
   // Notifications par courriel : « immediat », « quotidien » (enseignants) ou « aucun ».
   pref_courriel: PreferenceCourriel;
+  // Identifiant stable transmis par le fournisseur OpenID Connect de l'université (rempli au premier
+  // vrai login SSO, en liant le compte existant repéré par email) ; absent en mode démonstration.
+  identifiant_oidc: string | null;
 };
 
 export type PreferenceCourriel = "immediat" | "quotidien" | "aucun";
@@ -143,7 +146,8 @@ async function creerSchema(pool: Pool) {
       referent_id VARCHAR(64) REFERENCES utilisateurs(id),
       actif TINYINT NOT NULL DEFAULT 1,
       pref_courriel VARCHAR(20) NOT NULL DEFAULT 'immediat',
-      parcours VARCHAR(20)
+      parcours VARCHAR(20),
+      identifiant_oidc VARCHAR(255) UNIQUE
     ) ENGINE=InnoDB`,
     `CREATE TABLE IF NOT EXISTS presentations (
       etudiant_id VARCHAR(64) PRIMARY KEY REFERENCES utilisateurs(id),
@@ -244,6 +248,9 @@ async function creerSchema(pool: Pool) {
     ) ENGINE=InnoDB`,
   ];
   for (const sql of tables) await pool.query(sql);
+  // Colonnes ajoutées après la création initiale de la table (sans effet si déjà présentes :
+  // MariaDB ignore silencieusement un ADD COLUMN IF NOT EXISTS déjà satisfait).
+  await pool.query("ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS identifiant_oidc VARCHAR(255) UNIQUE");
 }
 
 const maintenant = () => new Date().toISOString();
@@ -258,6 +265,25 @@ export async function getUtilisateur(id: string): Promise<Utilisateur | undefine
   const pool = await obtenirPool();
   const [lignes] = await pool.query("SELECT * FROM utilisateurs WHERE id = ?", [id]);
   return (lignes as Utilisateur[])[0];
+}
+
+// Connexion OpenID Connect : retrouve le compte déjà lié (connexions suivantes), sinon le compte
+// existant (créé par l'administrateur, import ou ajout manuel) reconnu par son adresse mail.
+export async function getUtilisateurParOidc(identifiantOidc: string): Promise<Utilisateur | undefined> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM utilisateurs WHERE identifiant_oidc = ?", [identifiantOidc]);
+  return (lignes as Utilisateur[])[0];
+}
+
+export async function getUtilisateurParEmail(email: string): Promise<Utilisateur | undefined> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM utilisateurs WHERE LOWER(email) = LOWER(?)", [email]);
+  return (lignes as Utilisateur[])[0];
+}
+
+export async function lierIdentifiantOidc(id: string, identifiantOidc: string) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE utilisateurs SET identifiant_oidc = ? WHERE id = ?", [identifiantOidc, id]);
 }
 
 export async function listerUtilisateurs(): Promise<Utilisateur[]> {
@@ -1069,7 +1095,7 @@ async function completerDemo(pool: Pool) {
 }
 
 async function peuplerDemo(pool: Pool) {
-  const utilisateurs: Omit<Utilisateur, "referent_id" | "parcours" | "actif" | "pref_courriel">[] = [
+  const utilisateurs: Omit<Utilisateur, "referent_id" | "parcours" | "actif" | "pref_courriel" | "identifiant_oidc">[] = [
     { id: "ens-martin", prenom: "Claire", nom: "Martin", email: "claire.martin@exemple.fr", role: "admin", annee_but: null, groupe: null },
     { id: "ens-bernard", prenom: "Thomas", nom: "Bernard", email: "thomas.bernard@exemple.fr", role: "enseignant", annee_but: null, groupe: null },
     { id: "etu-dubois", prenom: "Léa", nom: "Dubois", email: "lea.dubois@etu.exemple.fr", role: "etudiant", annee_but: 1, groupe: "TD1" },

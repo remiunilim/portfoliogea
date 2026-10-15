@@ -47,7 +47,8 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 | --- | --- |
 | `src/lib/referentiel.ts` | Compétences, niveaux et apprentissages critiques des parcours GEMA, GPRH et GC2F, pondération des notes (source unique, à mettre à jour avec le nouveau programme national) |
 | `src/lib/db.ts` | Schéma MariaDB, requêtes (toutes asynchrones) et jeu de démonstration |
-| `src/lib/session.ts` | Connexion simulée (cookie) et règles d'accès (étudiant, référent, administrateur) |
+| `src/lib/session.ts` | Session (cookie) et règles d'accès (étudiant, référent, administrateur) |
+| `src/lib/oidc.ts`, `src/app/connexion/oidc` | Connexion SSO OpenID Connect (démarrage et retour) |
 | `src/lib/export-pdf.ts` | Assemblage du portfolio en un seul PDF (pdf-lib) |
 | `src/lib/import-etudiants.ts` | Lecture, contrôle et application de l'import des listes d'étudiants (ExcelJS), modèle Excel |
 | `src/app/notifications` | Notifications de l'utilisateur |
@@ -71,7 +72,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 - **Hébergement** : Apache en relais (reverse proxy) devant Node.js géré par un service systemd. Modèles prêts à adapter dans `deploy/` :
   - `deploy/apache-folio-gea.conf` : site Apache (reverse proxy + HTTPS)
   - `deploy/folio-gea.service` : service systemd (lance `next start`)
-- **Connexion SSO OpenID Connect** : reste à faire (remplacera `src/lib/session.ts` et `src/app/connexion`). À obtenir de la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, l'adresse de retour à déclarer, les informations transmises (identifiant, email, nom, prénom, statut étudiant ou personnel).
+- **Connexion SSO OpenID Connect** : faite (`src/lib/oidc.ts`, routes `src/app/connexion/oidc`), mais **pas encore testée avec le vrai fournisseur de la DSI** — en attente de ses réglages. Tant que `OIDC_ISSUER` (et les autres variables `OIDC_*` de `.env.example`) ne sont pas renseignées, `/connexion` reste en mode démonstration (choix d'un compte fictif) ; dès qu'elles le sont, elle affiche un seul bouton « Se connecter avec le compte de l'université ». Au premier vrai login, le compte est reconnu par son **email** (celui déjà enregistré via l'import Excel ou l'ajout manuel) puis l'identifiant OpenID Connect y est lié pour les connexions suivantes. **Aucun compte n'est créé automatiquement** : un compte universitaire inconnu de Folio GEA affiche un message invitant à contacter l'administrateur (l'étudiant·e ou l'enseignant·e doit déjà avoir été importé·e ou ajouté·e). À demander à la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, et l'URL de retour à déclarer chez eux (`OIDC_REDIRECT_URI`, doit correspondre exactement à ce qui est configuré côté DSI).
 
 **Sur le serveur Linux (Ubuntu)** :
 
@@ -84,7 +85,7 @@ npm run build && npm run start                       # ou via le service systemd
 
 ## Reporté aux étapes suivantes
 
-- Connexion par SSO OpenID Connect de l'université (elle remplacera `src/lib/session.ts`)
+- Essai de la connexion SSO OpenID Connect avec le vrai fournisseur de la DSI, une fois ses réglages reçus
 - Configuration Apache et systemd en production (modèles dans `deploy/`), sauvegardes de la base MariaDB
 - Envoi effectif des courriels de la file d'attente (SMTP de l'université), y compris le récapitulatif quotidien
 - Nouvelles versions du référentiel (nouveau programme national) et référentiel CG2P
