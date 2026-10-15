@@ -1,0 +1,12 @@
+# Une fois par jour à 18h : voir deploy/folio-gea-courriels-quotidien.service.
+# À copier dans /etc/systemd/system/ puis : sudo systemctl enable --now folio-gea-courriels-quotidien.timer
+
+[Unit]
+Description=Folio GEA - récapitulatif quotidien des courriels
+
+[Timer]
+OnCalendar=*-*-* 18:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
 import { FormAjoutEnseignant, FormAjoutEtudiant, FormImport } from "@/components/admin";
-import { affecterReferent, definirCG2PActifAction } from "@/app/actions";
+import { affecterReferent, definirCG2PActifAction, definirEnvoiMailsActifAction } from "@/app/actions";
 import Link from "next/link";
-import { cg2pEstActif, compterCourrielsEnAttente, listerComptesDesactives, listerEnseignants, listerEtudiants } from "@/lib/db";
+import { cg2pEstActif, compterCourrielsEnAttente, envoiMailsActif, listerComptesDesactives, listerEnseignants, listerEtudiants } from "@/lib/db";
 import { estAdmin, utilisateurCourant } from "@/lib/session";
 import { ANNEES } from "@/lib/referentiel";
 import { PARCOURS_GEA } from "@/lib/import-etudiants";
@@ -21,6 +21,7 @@ export default async function Affectations() {
   const courriels = await compterCourrielsEnAttente();
   const cg2pActif = await cg2pEstActif();
   const parcoursDisponibles = cg2pActif ? PARCOURS_GEA : PARCOURS_GEA.filter((p) => p !== "CG2P");
+  const mailsActifs = await envoiMailsActif();
 
   return (
     <>
@@ -37,9 +38,26 @@ export default async function Affectations() {
           (avec l&apos;administrateur) à voir et évaluer son portfolio.
         </p>
         <p className="mb-4 text-xs text-muted">
-          Courriels en attente d&apos;envoi : {courriels.immediat} immédiat(s), {courriels.quotidien} pour le récapitulatif quotidien · envoi
-          activé une fois la messagerie de l&apos;université branchée.
+          Courriels en attente d&apos;envoi : {courriels.immediat} immédiat(s), {courriels.quotidien} pour le récapitulatif quotidien.
         </p>
+
+        <form
+          action={definirEnvoiMailsActifAction}
+          className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
+        >
+          <input type="hidden" name="actif" value={mailsActifs ? "0" : "1"} />
+          <span>
+            Envoi des courriels :{" "}
+            {mailsActifs ? (
+              <span className="font-medium text-emerald-700">activé, chacun reçoit ses courriels selon sa préférence</span>
+            ) : (
+              <span className="text-muted">désactivé, personne ne reçoit de courriel pour l&apos;instant</span>
+            )}
+          </span>
+          <button className="ml-auto rounded-md border border-line px-3 py-1.5 hover:bg-primary-soft">
+            {mailsActifs ? "Désactiver" : "Activer"}
+          </button>
+        </form>
 
         <form
           action={definirCG2PActifAction}

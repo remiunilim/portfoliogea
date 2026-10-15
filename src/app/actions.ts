@@ -9,6 +9,7 @@ import {
   changerActivation,
   creerUtilisateur,
   definirCG2PActif,
+  definirEnvoiMailsActif,
   definirPreferenceCourriel,
   definirReferent,
   emailExiste,
@@ -356,6 +357,13 @@ export async function definirCG2PActifAction(formData: FormData) {
   const u = await utilisateurCourant();
   if (!estAdmin(u)) return;
   await definirCG2PActif(formData.get("actif") === "1");
+  refresh();
+}
+
+export async function definirEnvoiMailsActifAction(formData: FormData) {
+  const u = await utilisateurCourant();
+  if (!estAdmin(u)) return;
+  await definirEnvoiMailsActif(formData.get("actif") === "1");
   refresh();
 }
 

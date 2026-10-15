@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
 import { FormPreferences } from "@/components/admin";
-import { getUtilisateur, listerEtudiants } from "@/lib/db";
+import { envoiMailsActif, getUtilisateur, listerEtudiants } from "@/lib/db";
 import { estEnseignant, utilisateurCourant } from "@/lib/session";
 
 export default async function MonCompte() {
@@ -11,6 +11,7 @@ export default async function MonCompte() {
   const referent = u.referent_id ? await getUtilisateur(u.referent_id) : undefined;
   const nbSuivis = enseignant ? (await listerEtudiants({ referentId: u.id })).length : 0;
   const emailProvisoire = u.email.endsWith(".a-renseigner");
+  const mailsActifs = await envoiMailsActif();
 
   return (
     <>
@@ -35,10 +36,14 @@ export default async function MonCompte() {
               Aucune adresse mail n&apos;est encore enregistrée pour vous : aucun courriel ne pourra être envoyé.
             </p>
           )}
-          <FormPreferences preference={u.pref_courriel} enseignant={enseignant} />
-          <p className="mt-4 text-xs text-muted">
-            L&apos;envoi effectif des courriels sera activé avec la messagerie de l&apos;université ; vos choix sont déjà pris en compte.
-          </p>
+          {mailsActifs ? (
+            <FormPreferences preference={u.pref_courriel} enseignant={enseignant} />
+          ) : (
+            <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+              L&apos;envoi des courriels est temporairement désactivé par l&apos;administrateur : personne n&apos;en reçoit pour
+              l&apos;instant, ce réglage est donc pour le moment indisponible.
+            </p>
+          )}
         </section>
       </main>
     </>

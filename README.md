@@ -31,7 +31,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   - affectation des référents, étudiant par étudiant ;
   - fiche de chaque compte : modification (identité, email, année, parcours, groupe, référent, droits), désactivation (sortie de formation, départ : accès fermé, données conservées), suppression définitive (un étudiant avec tout son portfolio ; un enseignant seulement s'il n'a laissé aucune évaluation ni action), avec saisie du nom pour confirmer ;
   - **passage d'année et réaffectations groupés** (page dédiée) : filtre par année, par référent ou par nom, sélection multiple, puis changement d'année (« année suivante » ou année précise), de parcours, de référent ou de groupe ; désactivation groupée en fin de formation. Chaque changement est inscrit dans le journal de l'étudiant.
-- **Notifications** : l'étudiant est prévenu dans l'outil (cloche dans l'en-tête) dès qu'une évaluation est publiée ; le référent, dès qu'un de ses étudiants dépose ou modifie un argumentaire, une trace ou sa présentation (une seule notification par dépôt tant qu'elle n'est pas lue). Chacun choisit sur sa page *Mon compte* (clic sur son nom) de recevoir aussi un courriel : à chaque fois, en récapitulatif quotidien (enseignants) ou jamais. Les courriels sont placés dans une file d'attente, qui sera envoyée par la messagerie de l'université une fois branchée.
+- **Notifications** : l'étudiant est prévenu dans l'outil (cloche dans l'en-tête) dès qu'une évaluation est publiée ; le référent, dès qu'un de ses étudiants dépose ou modifie un argumentaire, une trace ou sa présentation (une seule notification par dépôt tant qu'elle n'est pas lue). Chacun choisit sur sa page *Mon compte* (clic sur son nom) de recevoir aussi un courriel : à chaque fois, en récapitulatif quotidien (enseignants) ou jamais. Les courriels sont placés dans une file d'attente et expédiés par SMTP (voir `.env.example`) — **mais l'envoi réel reste coupé pour tout le monde tant que l'administrateur ne l'a pas activé** (page *Étudiants et affectations*, section « Envoi des courriels ») : par défaut, personne n'en reçoit, et la préférence de chacun est verrouillée sur *Mon compte* en attendant.
 - **Export PDF** : l'onglet *Portfolio complet* produit un seul PDF qui contient, dans l'ordre :
   - une couverture et un sommaire paginé ;
   - la présentation de l'étudiant ;
@@ -50,6 +50,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 | `src/lib/session.ts` | Session (cookie) et règles d'accès (étudiant, référent, administrateur) |
 | `src/lib/oidc.ts`, `src/app/connexion/oidc` | Connexion SSO OpenID Connect (démarrage et retour) |
 | `src/lib/export-pdf.ts` | Assemblage du portfolio en un seul PDF (pdf-lib) |
+| `src/lib/mail.ts`, `src/lib/courriels.ts` | Envoi SMTP et vidage de la file de courriels (`src/app/api/cron/courriels`, déclenché périodiquement, voir `deploy/`) |
 | `src/lib/import-etudiants.ts` | Lecture, contrôle et application de l'import des listes d'étudiants (ExcelJS), modèle Excel |
 | `src/app/notifications` | Notifications de l'utilisateur |
 | `src/app/actions.ts` | Server Actions : dépôts, évaluations, publication, affectations, journal |
@@ -87,6 +88,6 @@ npm run build && npm run start                       # ou via le service systemd
 
 - Essai de la connexion SSO OpenID Connect avec le vrai fournisseur de la DSI, une fois ses réglages reçus
 - Configuration Apache et systemd en production (modèles dans `deploy/`), sauvegardes de la base MariaDB
-- Envoi effectif des courriels de la file d'attente (SMTP de l'université), y compris le récapitulatif quotidien
+- Renseigner les réglages SMTP de l'université (`.env.example`) puis activer l'envoi des courriels (page *Étudiants et affectations*) quand le moment sera venu
 - Nouvelles versions du référentiel, le jour où le nouveau programme national sera publié
 - Activer CG2P (page *Étudiants et affectations* → section « Parcours CG2P ») quand l'IUT ouvrira ce parcours

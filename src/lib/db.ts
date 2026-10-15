@@ -256,6 +256,7 @@ async function creerSchema(pool: Pool) {
   // Colonnes ajoutées après la création initiale de la table (sans effet si déjà présentes :
   // MariaDB ignore silencieusement un ADD COLUMN IF NOT EXISTS déjà satisfait).
   await pool.query("ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS identifiant_oidc VARCHAR(255) UNIQUE");
+  await pool.query("ALTER TABLE courriels ADD COLUMN IF NOT EXISTS envoye_le VARCHAR(32)");
 }
 
 const maintenant = () => new Date().toISOString();
@@ -673,6 +674,34 @@ export async function compterCourrielsEnAttente(): Promise<{ immediat: number; q
   return { immediat: l.find((x) => x.mode === "immediat")?.n ?? 0, quotidien: l.find((x) => x.mode === "quotidien")?.n ?? 0 };
 }
 
+export type Courriel = {
+  id: number;
+  destinataire_id: string;
+  adresse: string;
+  sujet: string;
+  corps: string;
+  mode: "immediat" | "quotidien";
+  statut: "en_attente" | "envoye" | "echec";
+  cree_le: string;
+  envoye_le: string | null;
+};
+
+export async function getCourrielsEnAttente(mode: "immediat" | "quotidien"): Promise<Courriel[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM courriels WHERE statut = 'en_attente' AND mode = ? ORDER BY cree_le", [mode]);
+  return lignes as Courriel[];
+}
+
+export async function marquerCourrielEnvoye(id: number) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE courriels SET statut = 'envoye', envoye_le = ? WHERE id = ?", [maintenant(), id]);
+}
+
+export async function marquerCourrielEchec(id: number) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE courriels SET statut = 'echec' WHERE id = ?", [id]);
+}
+
 export async function definirPreferenceCourriel(id: string, pref: PreferenceCourriel) {
   const pool = await obtenirPool();
   await pool.query("UPDATE utilisateurs SET pref_courriel = ? WHERE id = ?", [pref, id]);
@@ -957,6 +986,26 @@ export async function definirCG2PActif(actif: boolean) {
   await pool.query(
     `INSERT INTO parametres (cle, valeur) VALUES (?, ?) ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)`,
     [CLE_CG2P_ACTIF, actif ? "1" : "0"],
+  );
+}
+
+const CLE_ENVOI_MAILS_ACTIF = "envoi_mails_actif";
+
+// Coupe-circuit global : tant qu'il n'est pas activé par l'administrateur, aucun courriel n'est
+// expédié (ils restent en file d'attente) et la préférence de chacun est verrouillée sur « Mon
+// compte ». Désactivé par défaut : personne ne reçoit de courriel tant que l'envoi réel n'a pas
+// été validé (SMTP de l'université branché, voir .env.example).
+export async function envoiMailsActif(): Promise<boolean> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT valeur FROM parametres WHERE cle = ?", [CLE_ENVOI_MAILS_ACTIF]);
+  return (lignes as { valeur: string }[])[0]?.valeur === "1";
+}
+
+export async function definirEnvoiMailsActif(actif: boolean) {
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO parametres (cle, valeur) VALUES (?, ?) ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)`,
+    [CLE_ENVOI_MAILS_ACTIF, actif ? "1" : "0"],
   );
 }
 

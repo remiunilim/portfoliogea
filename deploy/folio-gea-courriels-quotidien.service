@@ -1,0 +1,12 @@
+# Envoie le récapitulatif quotidien (un seul courriel par destinataire, regroupant tout ce qui est
+# en attente). Déclenché par deploy/folio-gea-courriels-quotidien.timer, une fois par jour.
+# CRON_SECRET doit correspondre à .env.local. À adapter (domaine, secret) puis copier dans
+# /etc/systemd/system/.
+
+[Unit]
+Description=Folio GEA - envoi du récapitulatif quotidien
+After=folio-gea.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/curl -fsS "https://folio-gea.universite.fr/api/cron/courriels?secret=CHANGEZ_MOI&mode=quotidien"

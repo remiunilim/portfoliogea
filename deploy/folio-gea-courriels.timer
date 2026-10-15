@@ -1,0 +1,12 @@
+# Toutes les 5 minutes : voir deploy/folio-gea-courriels.service.
+# À copier dans /etc/systemd/system/ puis : sudo systemctl enable --now folio-gea-courriels.timer
+
+[Unit]
+Description=Folio GEA - envoi périodique des courriels immédiats
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
