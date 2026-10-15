@@ -5,9 +5,9 @@ import { peutConsulter, utilisateurCourant } from "@/lib/session";
 // Sert le PDF d'une trace, uniquement à l'étudiant concerné et aux enseignants.
 export async function GET(requete: Request, ctx: RouteContext<"/fichiers/[id]">) {
   const { id } = await ctx.params;
-  const trace = getTrace(id);
+  const trace = await getTrace(id);
   if (!trace) return new Response("Introuvable", { status: 404 });
-  if (!peutConsulter(await utilisateurCourant(), trace.etudiant_id)) {
+  if (!(await peutConsulter(await utilisateurCourant(), trace.etudiant_id))) {
     return new Response("Accès refusé", { status: 403 });
   }
   const contenu = fs.readFileSync(cheminFichier(id));

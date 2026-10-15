@@ -61,13 +61,15 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
 
   // Un enseignant ne voit que ses étudiants ; l'administrateur voit tout le monde et peut filtrer par référent.
   const admin = estAdmin(u);
-  const enseignants = listerEnseignants();
+  const enseignants = await listerEnseignants();
   const filtreReferent = admin ? (typeof referentParam === "string" ? referentParam : "") : u.id;
   const visible = (e: Utilisateur) =>
     (!filtreReferent || (filtreReferent === "aucun" ? !e.referent_id : e.referent_id === filtreReferent)) &&
     (!filtreParcours || infosParcours(e.parcours).code === filtreParcours);
-  const etudiants = listerEtudiants({ anneeBut: promo }).filter(visible);
-  const effectifs = Object.fromEntries(ANNEES.map((a) => [a, listerEtudiants({ anneeBut: a }).filter(visible).length]));
+  const etudiants = (await listerEtudiants({ anneeBut: promo })).filter(visible);
+  const effectifs = Object.fromEntries(
+    await Promise.all(ANNEES.map(async (a) => [a, (await listerEtudiants({ anneeBut: a })).filter(visible).length])),
+  );
   const lienFiltre = (p: { promo?: number; referent?: string; parcours?: string }) => {
     const ref = p.referent ?? filtreReferent;
     const parc = p.parcours ?? filtreParcours;
@@ -78,36 +80,38 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
     return r ? `${r.prenom} ${r.nom}` : "Sans référent";
   };
 
-  const lignes = etudiants.map((etu) => {
-    const args = getArgumentaires(etu.id);
-    const traces = getTraces(etu.id);
-    const evals = getEvaluations(etu.id);
-    const modifs = getDernieresModifsEtudiant(etu.id);
-    const vu = getDerniereConsultation(u.id, etu.id);
-    const cellules: Record<string, EtatCellule> = {};
-    for (const c of competences) {
-      const aArgumentaire = !!args.find((a) => a.annee === promo && a.competence === c.code)?.texte.trim();
-      const nbTraces = traces.filter((t) => t.annee === promo && t.competence === c.code).length;
-      const ev = evals.find((e) => e.annee === promo && e.competence === c.code);
-      const derniereModif = modifs.get(`${promo}-${c.code}`);
-      cellules[c.code] = {
-        depot: aArgumentaire && nbTraces ? "complet" : aArgumentaire || nbTraces ? "partiel" : "vide",
-        nbTraces,
-        aArgumentaire,
-        evaluation: ev?.niveau,
-        note: ev?.note ?? null,
-        publiee: !!ev?.publiee_le,
-        nonPublie: !!ev && ev.niveau !== "non_evalue" && brouillonNonPublie(ev),
-        nouveau: !!derniereModif && (!vu || derniereModif > vu),
-        aRevoir: !!ev && !!derniereModif && derniereModif > ev.maj_le,
-        derniereModif,
-      };
-    }
-    // Années antérieures complétées après coup (historique BUT1/BUT2).
-    const historique = [...modifs.entries()].filter(([cle]) => Number(cle.split("-")[0]) < promo).length;
-    const rdv = getRendezVous(etu.id).filter((r) => r.annee === promo);
-    return { etu, cellules, historique, rdv };
-  });
+  const lignes = await Promise.all(
+    etudiants.map(async (etu) => {
+      const args = await getArgumentaires(etu.id);
+      const traces = await getTraces(etu.id);
+      const evals = await getEvaluations(etu.id);
+      const modifs = await getDernieresModifsEtudiant(etu.id);
+      const vu = await getDerniereConsultation(u.id, etu.id);
+      const cellules: Record<string, EtatCellule> = {};
+      for (const c of competences) {
+        const aArgumentaire = !!args.find((a) => a.annee === promo && a.competence === c.code)?.texte.trim();
+        const nbTraces = traces.filter((t) => t.annee === promo && t.competence === c.code).length;
+        const ev = evals.find((e) => e.annee === promo && e.competence === c.code);
+        const derniereModif = modifs.get(`${promo}-${c.code}`);
+        cellules[c.code] = {
+          depot: aArgumentaire && nbTraces ? "complet" : aArgumentaire || nbTraces ? "partiel" : "vide",
+          nbTraces,
+          aArgumentaire,
+          evaluation: ev?.niveau,
+          note: ev?.note ?? null,
+          publiee: !!ev?.publiee_le,
+          nonPublie: !!ev && ev.niveau !== "non_evalue" && brouillonNonPublie(ev),
+          nouveau: !!derniereModif && (!vu || derniereModif > vu),
+          aRevoir: !!ev && !!derniereModif && derniereModif > ev.maj_le,
+          derniereModif,
+        };
+      }
+      // Années antérieures complétées après coup (historique BUT1/BUT2).
+      const historique = [...modifs.entries()].filter(([cle]) => Number(cle.split("-")[0]) < promo).length;
+      const rdv = (await getRendezVous(etu.id)).filter((r) => r.annee === promo);
+      return { etu, cellules, historique, rdv };
+    }),
+  );
 
   const toutes = lignes.flatMap((l) => Object.values(l.cellules));
   const stats = {
@@ -117,11 +121,15 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
     nouveaux: toutes.filter((c) => c.nouveau).length,
     total: toutes.length,
   };
-  const journal = getJournal({
-    anneeBut: promo,
-    referentId: filtreReferent && filtreReferent !== "aucun" ? filtreReferent : undefined,
-    limite: 40,
-  }).filter((j) => etudiants.some((e) => e.id === j.etudiant_id)).slice(0, 25);
+  const journal = (
+    await getJournal({
+      anneeBut: promo,
+      referentId: filtreReferent && filtreReferent !== "aucun" ? filtreReferent : undefined,
+      limite: 40,
+    })
+  )
+    .filter((j) => etudiants.some((e) => e.id === j.etudiant_id))
+    .slice(0, 25);
 
   return (
     <>

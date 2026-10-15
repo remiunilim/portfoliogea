@@ -182,15 +182,16 @@ function trouverEnseignant(texte: string, email: string, enseignants: Utilisateu
   return parNom.length > 1 ? "ambigu" : null;
 }
 
-export function analyserImport(lignes: LigneBrute[], creerEnseignants: boolean): LigneApercu[] {
-  const enseignants = listerEnseignants();
+export async function analyserImport(lignes: LigneBrute[], creerEnseignants: boolean): Promise<LigneApercu[]> {
+  const enseignants = await listerEnseignants();
   // Les comptes désactivés sont reconnus aussi : un étudiant qui revient est réactivé, pas recréé.
-  const etudiants = listerEtudiants({ inclureDesactives: true });
+  const etudiants = await listerEtudiants({ inclureDesactives: true });
   const vus = new Map<string, number>();
   const emailsVus = new Map<string, number>();
   const aCreer = new Map<string, { prenom: string; nom: string; email: string }>();
 
-  return lignes.map((l) => {
+  const resultats: LigneApercu[] = [];
+  for (const l of lignes) {
     const nom = l.nom ?? "";
     const prenom = l.prenom ?? "";
     const email = (l.email ?? "").toLowerCase();
@@ -246,7 +247,7 @@ export function analyserImport(lignes: LigneBrute[], creerEnseignants: boolean):
         aCreer.set(cleRef, referentACreer);
         referentNom = `${referentACreer.prenom} ${referentACreer.nom}`;
         // emailExiste couvre aussi les comptes désactivés (l'adresse reste unique en base).
-        if (emailReferent && emailExiste(emailReferent)) {
+        if (emailReferent && (await emailExiste(emailReferent))) {
           erreurs.push(`L'adresse ${emailReferent} appartient déjà à un autre compte (éventuellement désactivé).`);
         }
         avertissements.push(`Enseignant « ${referentNom} » inconnu : il sera créé${emailReferent ? "" : " sans email"}.`);
@@ -266,7 +267,7 @@ export function analyserImport(lignes: LigneBrute[], creerEnseignants: boolean):
     const homonymes = etudiants.filter((e) => cleNom(e.prenom, e.nom) === cle);
     const existant = parEmail ?? (homonymes.length === 1 ? homonymes[0] : undefined);
     if (!parEmail && homonymes.length > 1) erreurs.push("Plusieurs étudiants portent ce nom : renseignez l'email étudiant pour les distinguer.");
-    if (emailValide && !erreurs.some((e) => e.startsWith(`L'adresse ${email}`)) && emailExiste(email) && normaliser(existant?.email ?? "") !== email) {
+    if (emailValide && !erreurs.some((e) => e.startsWith(`L'adresse ${email}`)) && (await emailExiste(email)) && normaliser(existant?.email ?? "") !== email) {
       erreurs.push(`L'adresse ${email} appartient déjà à un autre compte.`);
     }
 
@@ -290,7 +291,7 @@ export function analyserImport(lignes: LigneBrute[], creerEnseignants: boolean):
     }
     if (erreurs.length) action = "erreur";
 
-    return {
+    resultats.push({
       numero: l.numero,
       nom,
       prenom,
@@ -310,11 +311,12 @@ export function analyserImport(lignes: LigneBrute[], creerEnseignants: boolean):
       changements,
       erreurs,
       avertissements,
-    };
-  });
+    });
+  }
+  return resultats;
 }
 
-export function appliquerImport(apercu: LigneApercu[]) {
+export async function appliquerImport(apercu: LigneApercu[]) {
   const enseignantsCrees = new Map<string, string>();
   const bilan = { crees: 0, misAJour: 0, inchanges: 0, ignores: 0, enseignantsCrees: 0, emailsEnseignantsCompletes: 0 };
   for (const l of apercu) {
@@ -331,17 +333,17 @@ export function appliquerImport(apercu: LigneApercu[]) {
       const cle = l.referentACreer.email || normaliser(`${l.referentACreer.prenom} ${l.referentACreer.nom}`);
       referentId = enseignantsCrees.get(cle) ?? null;
       if (!referentId) {
-        referentId = creerUtilisateur({ ...l.referentACreer, role: "enseignant" });
+        referentId = await creerUtilisateur({ ...l.referentACreer, role: "enseignant" });
         enseignantsCrees.set(cle, referentId);
         bilan.enseignantsCrees++;
       }
     }
-    if (referentId && l.emailReferentACompleter && !emailExiste(l.emailReferentACompleter)) {
-      modifierEmail(referentId, l.emailReferentACompleter);
+    if (referentId && l.emailReferentACompleter && !(await emailExiste(l.emailReferentACompleter))) {
+      await modifierEmail(referentId, l.emailReferentACompleter);
       bilan.emailsEnseignantsCompletes++;
     }
     if (l.action === "creer") {
-      creerUtilisateur({
+      await creerUtilisateur({
         nom: l.nom,
         prenom: l.prenom,
         email: l.nouvelEmail ?? undefined,
@@ -353,14 +355,14 @@ export function appliquerImport(apercu: LigneApercu[]) {
       });
       bilan.crees++;
     } else {
-      mettreAJourEtudiant(l.etudiantId!, {
+      await mettreAJourEtudiant(l.etudiantId!, {
         annee_but: l.annee!,
         parcours: l.parcours,
         // Colonnes référent vides : on conserve l'affectation actuelle.
         referent_id: l.referentTexte || l.emailReferent ? referentId : undefined,
       });
-      if (l.nouvelEmail) modifierEmail(l.etudiantId!, l.nouvelEmail);
-      changerActivation(l.etudiantId!, true);
+      if (l.nouvelEmail) await modifierEmail(l.etudiantId!, l.nouvelEmail);
+      await changerActivation(l.etudiantId!, true);
       bilan.misAJour++;
     }
   }

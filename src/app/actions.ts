@@ -62,7 +62,7 @@ const nbMots = (t: string) => (t ? t.split(/\s+/).length : 0);
 
 export async function seConnecter(formData: FormData) {
   const id = texte(formData, "utilisateur");
-  const u = getUtilisateur(id);
+  const u = await getUtilisateur(id);
   if (!u || !u.actif) return;
   (await cookies()).set(COOKIE_SESSION, u.id, { httpOnly: true, sameSite: "lax", path: "/" });
   redirect(u.role === "etudiant" ? `/portfolio/${u.id}` : "/enseignant");
@@ -80,7 +80,7 @@ async function contexteDepot(formData: FormData) {
   const etudiantId = texte(formData, "etudiant");
   const annee = Number(formData.get("annee"));
   const competence = texte(formData, "competence");
-  if (!estAnneeBUT(annee) || !competenceParCode(competence, getUtilisateur(etudiantId)?.parcours)?.niveaux[annee]) {
+  if (!estAnneeBUT(annee) || !competenceParCode(competence, (await getUtilisateur(etudiantId))?.parcours)?.niveaux[annee]) {
     return { erreur: "Compétence ou année inconnue." } as const;
   }
   if (!peutModifier(u, etudiantId, annee)) {
@@ -98,10 +98,10 @@ async function lirePdf(fichier: FormDataEntryValue | null): Promise<{ nom: strin
 }
 
 // Prévient le référent d'un dépôt ou d'une modification (notifications regroupées tant qu'elles ne sont pas lues).
-function prevenirReferent(etudiant: Utilisateur, annee: number | null, competence: string | null, quoi: string) {
+async function prevenirReferent(etudiant: Utilisateur, annee: number | null, competence: string | null, quoi: string) {
   const c = competence ? competenceParCode(competence, etudiant.parcours) : undefined;
   const nom = `${etudiant.prenom} ${etudiant.nom}`;
-  notifierReferent(
+  await notifierReferent(
     etudiant,
     c ? `${nom} · ${c.code} ${c.nomCourt} (BUT${annee}) mis à jour` : `${nom} a mis à jour sa présentation`,
     quoi,
@@ -117,13 +117,13 @@ export async function sauverPresentation(_: EtatFormulaire, formData: FormData):
   if (!peutModifier(u, etudiantId)) return { ok: false, message: "Vous ne pouvez pas modifier ce portfolio." };
   const presentation = texte(formData, "texte");
   const projetPro = texte(formData, "projet_pro");
-  const avant = getPresentation(etudiantId);
+  const avant = await getPresentation(etudiantId);
   if (avant && avant.texte === presentation && avant.projet_pro === projetPro) {
     return { ok: true, message: "Aucune modification." };
   }
-  enregistrerPresentation(etudiantId, presentation, projetPro);
-  journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee: null, competence: null, type: "presentation_maj", detail: "" });
-  prevenirReferent(u!, null, null, "présentation et projet professionnel");
+  await enregistrerPresentation(etudiantId, presentation, projetPro);
+  await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee: null, competence: null, type: "presentation_maj", detail: "" });
+  await prevenirReferent(u!, null, null, "présentation et projet professionnel");
   refresh();
   return { ok: true, message: "Présentation enregistrée." };
 }
@@ -132,13 +132,13 @@ export async function sauverArgumentaire(_: EtatFormulaire, formData: FormData):
   const ctx = await contexteDepot(formData);
   if ("erreur" in ctx) return { ok: false, message: ctx.erreur! };
   const nouveau = texte(formData, "texte");
-  const avant = getArgumentaires(ctx.etudiantId).find(
+  const avant = (await getArgumentaires(ctx.etudiantId)).find(
     (a) => a.annee === ctx.annee && a.competence === ctx.competence,
   );
   if ((avant?.texte ?? "") === nouveau) return { ok: true, message: "Aucune modification." };
-  enregistrerArgumentaire(ctx.etudiantId, ctx.annee, ctx.competence, nouveau);
+  await enregistrerArgumentaire(ctx.etudiantId, ctx.annee, ctx.competence, nouveau);
   const ecart = nbMots(nouveau) - nbMots(avant?.texte ?? "");
-  journaliser({
+  await journaliser({
     etudiant_id: ctx.etudiantId,
     acteur_id: ctx.u.id,
     annee: ctx.annee,
@@ -146,7 +146,7 @@ export async function sauverArgumentaire(_: EtatFormulaire, formData: FormData):
     type: avant ? "argumentaire_maj" : "argumentaire_cree",
     detail: `${nbMots(nouveau)} mots${avant ? ` (${ecart >= 0 ? "+" : ""}${ecart})` : ""}`,
   });
-  prevenirReferent(ctx.u, ctx.annee, ctx.competence, `argumentaire ${avant ? "modifié" : "rédigé"} (${nbMots(nouveau)} mots)`);
+  await prevenirReferent(ctx.u, ctx.annee, ctx.competence, `argumentaire ${avant ? "modifié" : "rédigé"} (${nbMots(nouveau)} mots)`);
   refresh();
   return { ok: true, message: "Argumentaire enregistré." };
 }
@@ -156,7 +156,7 @@ export async function deposerTrace(_: EtatFormulaire, formData: FormData): Promi
   if ("erreur" in ctx) return { ok: false, message: ctx.erreur! };
   const titre = texte(formData, "titre");
   if (!titre) return { ok: false, message: "Donnez un titre à la trace." };
-  const existantes = getTraces(ctx.etudiantId).filter(
+  const existantes = (await getTraces(ctx.etudiantId)).filter(
     (t) => t.annee === ctx.annee && t.competence === ctx.competence,
   );
   if (existantes.length >= MAX_TRACES_PAR_COMPETENCE) {
@@ -164,7 +164,7 @@ export async function deposerTrace(_: EtatFormulaire, formData: FormData): Promi
   }
   const pdf = await lirePdf(formData.get("fichier"));
   if (typeof pdf === "string") return { ok: false, message: pdf };
-  ajouterTrace(
+  await ajouterTrace(
     {
       etudiant_id: ctx.etudiantId,
       annee: ctx.annee,
@@ -176,14 +176,14 @@ export async function deposerTrace(_: EtatFormulaire, formData: FormData): Promi
     },
     pdf.contenu,
   );
-  journaliser({ etudiant_id: ctx.etudiantId, acteur_id: ctx.u.id, annee: ctx.annee, competence: ctx.competence, type: "trace_ajoutee", detail: titre });
-  prevenirReferent(ctx.u, ctx.annee, ctx.competence, `trace déposée : ${titre}`);
+  await journaliser({ etudiant_id: ctx.etudiantId, acteur_id: ctx.u.id, annee: ctx.annee, competence: ctx.competence, type: "trace_ajoutee", detail: titre });
+  await prevenirReferent(ctx.u, ctx.annee, ctx.competence, `trace déposée : ${titre}`);
   refresh();
   return { ok: true, message: "Trace déposée." };
 }
 
 export async function modifierTraceAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
-  const trace = getTrace(texte(formData, "trace"));
+  const trace = await getTrace(texte(formData, "trace"));
   if (!trace) return { ok: false, message: "Trace introuvable." };
   const u = await utilisateurCourant();
   if (!peutModifier(u, trace.etudiant_id, trace.annee)) return { ok: false, message: "Modification non autorisée." };
@@ -195,8 +195,8 @@ export async function modifierTraceAction(_: EtatFormulaire, formData: FormData)
     if (typeof lu === "string") return { ok: false, message: lu };
     pdf = lu;
   }
-  modifierTrace(trace.id, { titre, description: texte(formData, "description") }, pdf);
-  journaliser({
+  await modifierTrace(trace.id, { titre, description: texte(formData, "description") }, pdf);
+  await journaliser({
     etudiant_id: trace.etudiant_id,
     acteur_id: u!.id,
     annee: trace.annee,
@@ -204,19 +204,19 @@ export async function modifierTraceAction(_: EtatFormulaire, formData: FormData)
     type: pdf ? "trace_remplacee" : "trace_modifiee",
     detail: pdf ? `${titre} — nouveau fichier : ${pdf.nom}` : titre,
   });
-  prevenirReferent(u!, trace.annee, trace.competence, pdf ? `fichier de trace remplacé : ${titre}` : `trace modifiée : ${titre}`);
+  await prevenirReferent(u!, trace.annee, trace.competence, pdf ? `fichier de trace remplacé : ${titre}` : `trace modifiée : ${titre}`);
   refresh();
   return { ok: true, message: pdf ? "Fichier remplacé." : "Trace modifiée." };
 }
 
 export async function supprimerTraceAction(formData: FormData) {
-  const trace = getTrace(texte(formData, "trace"));
+  const trace = await getTrace(texte(formData, "trace"));
   if (!trace) return;
   const u = await utilisateurCourant();
   if (!peutModifier(u, trace.etudiant_id, trace.annee)) return;
-  supprimerTrace(trace.id);
-  journaliser({ etudiant_id: trace.etudiant_id, acteur_id: u!.id, annee: trace.annee, competence: trace.competence, type: "trace_supprimee", detail: trace.titre });
-  prevenirReferent(u!, trace.annee, trace.competence, `trace supprimée : ${trace.titre}`);
+  await supprimerTrace(trace.id);
+  await journaliser({ etudiant_id: trace.etudiant_id, acteur_id: u!.id, annee: trace.annee, competence: trace.competence, type: "trace_supprimee", detail: trace.titre });
+  await prevenirReferent(u!, trace.annee, trace.competence, `trace supprimée : ${trace.titre}`);
   refresh();
 }
 
@@ -224,19 +224,19 @@ export async function supprimerTraceAction(formData: FormData) {
 
 export async function marquerPortfolioConsulte(etudiantId: string) {
   const u = await utilisateurCourant();
-  if (!suitEtudiant(u, etudiantId)) return;
-  marquerConsulte(u!.id, etudiantId);
+  if (!(await suitEtudiant(u, etudiantId))) return;
+  await marquerConsulte(u!.id, etudiantId);
 }
 
 // Enregistre le brouillon ; avec le bouton « Enregistrer et publier », le rend aussi visible par l'étudiant.
 export async function evaluer(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   const u = await utilisateurCourant();
   const etudiantId = texte(formData, "etudiant");
-  if (!suitEtudiant(u, etudiantId)) return { ok: false, message: "Vous n'êtes pas le référent de cet étudiant." };
+  if (!(await suitEtudiant(u, etudiantId))) return { ok: false, message: "Vous n'êtes pas le référent de cet étudiant." };
   const annee = Number(formData.get("annee"));
   const competence = texte(formData, "competence");
   const niveau = texte(formData, "niveau");
-  const parcours = getUtilisateur(etudiantId)?.parcours;
+  const parcours = (await getUtilisateur(etudiantId))?.parcours;
   if (!estAnneeBUT(annee) || !competenceParCode(competence, parcours)?.niveaux[annee]) {
     return { ok: false, message: "Évaluation invalide." };
   }
@@ -249,12 +249,12 @@ export async function evaluer(_: EtatFormulaire, formData: FormData): Promise<Et
   if (niveau !== "non_evalue" && note === null) return { ok: false, message: `Saisissez la note sur ${NOTE_MAX} : elle accompagne obligatoirement le niveau.` };
   const noteRetenue = niveau === "non_evalue" ? null : note;
   const resume = `${libelleEvaluation(niveau)}${noteRetenue !== null ? ` · ${formatNote(noteRetenue)}` : ""}`;
-  enregistrerEvaluation({ etudiant_id: etudiantId, annee, competence, niveau, note: noteRetenue, commentaire: texte(formData, "commentaire"), enseignant_id: u!.id });
-  journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence, type: "evaluation", detail: `${resume} (brouillon)` });
-  if (publier && publierEvaluations({ etudiantId, annee, competence }, u!.id).length) {
-    journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence, type: "evaluation_publiee", detail: resume });
+  await enregistrerEvaluation({ etudiant_id: etudiantId, annee, competence, niveau, note: noteRetenue, commentaire: texte(formData, "commentaire"), enseignant_id: u!.id });
+  await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence, type: "evaluation", detail: `${resume} (brouillon)` });
+  if (publier && (await publierEvaluations({ etudiantId, annee, competence }, u!.id)).length) {
+    await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence, type: "evaluation_publiee", detail: resume });
     const c = competenceParCode(competence, parcours)!;
-    notifier({
+    await notifier({
       destinataire_id: etudiantId,
       titre: `Évaluation publiée : ${c.code} ${c.nomCourt} (BUT${annee})`,
       detail: `${resume} · par ${u!.prenom} ${u!.nom}`,
@@ -272,7 +272,7 @@ export async function evaluer(_: EtatFormulaire, formData: FormData): Promise<Et
 export async function enregistrerRendezVousAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   const u = await utilisateurCourant();
   const etudiantId = texte(formData, "etudiant");
-  if (!suitEtudiant(u, etudiantId)) return { ok: false, message: "Vous n'êtes pas le référent de cet étudiant." };
+  if (!(await suitEtudiant(u, etudiantId))) return { ok: false, message: "Vous n'êtes pas le référent de cet étudiant." };
   const annee = Number(formData.get("annee"));
   const numero = Number(formData.get("numero"));
   const rdv = RENDEZ_VOUS.find((r) => r.numero === numero);
@@ -282,12 +282,12 @@ export async function enregistrerRendezVousAction(_: EtatFormulaire, formData: F
   if (note === null) return { ok: false, message: `Saisissez la note du rendez-vous sur ${NOTE_MAX}.` };
   const date = texte(formData, "date");
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, message: "Date invalide." };
-  enregistrerRendezVous({ etudiant_id: etudiantId, annee, numero: numero as 1 | 2, date_rdv: date || null, note, commentaire: texte(formData, "commentaire"), enseignant_id: u!.id });
-  journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence: null, type: "rendez_vous", detail: `${rdv.libelle} · ${formatNote(note)} (brouillon)` });
+  await enregistrerRendezVous({ etudiant_id: etudiantId, annee, numero: numero as 1 | 2, date_rdv: date || null, note, commentaire: texte(formData, "commentaire"), enseignant_id: u!.id });
+  await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence: null, type: "rendez_vous", detail: `${rdv.libelle} · ${formatNote(note)} (brouillon)` });
   const publier = formData.get("publier") === "1";
-  if (publier && publierRendezVous({ etudiantId, annee, numero }).length) {
-    journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence: null, type: "rendez_vous_publie", detail: `${rdv.libelle} · ${formatNote(note)}` });
-    notifier({
+  if (publier && (await publierRendezVous({ etudiantId, annee, numero })).length) {
+    await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence: null, type: "rendez_vous_publie", detail: `${rdv.libelle} · ${formatNote(note)}` });
+    await notifier({
       destinataire_id: etudiantId,
       titre: `${rdv.libelle} : note publiée (BUT${annee})`,
       detail: `${formatNote(note)} · par ${u!.prenom} ${u!.nom}`,
@@ -303,10 +303,10 @@ export async function publierAnnee(_: EtatFormulaire, formData: FormData): Promi
   const u = await utilisateurCourant();
   const etudiantId = texte(formData, "etudiant");
   const annee = Number(formData.get("annee"));
-  if (!suitEtudiant(u, etudiantId) || !estAnneeBUT(annee)) return { ok: false, message: "Publication non autorisée." };
-  const sansNote = evaluationsSansNote(etudiantId, annee);
-  const publiees = publierEvaluations({ etudiantId, annee }, u!.id);
-  const rdvPublies = publierRendezVous({ etudiantId, annee });
+  if (!(await suitEtudiant(u, etudiantId)) || !estAnneeBUT(annee)) return { ok: false, message: "Publication non autorisée." };
+  const sansNote = await evaluationsSansNote(etudiantId, annee);
+  const publiees = await publierEvaluations({ etudiantId, annee }, u!.id);
+  const rdvPublies = await publierRendezVous({ etudiantId, annee });
   const n = publiees.length + rdvPublies.length;
   const alerte = sansNote.length ? ` Non publiée(s) faute de note : ${sansNote.join(", ")}.` : "";
   if (n === 0) return { ok: !sansNote.length, message: `Aucun brouillon publié.${alerte}` };
@@ -314,14 +314,15 @@ export async function publierAnnee(_: EtatFormulaire, formData: FormData): Promi
     ...publiees.map((p) => `${p.competence} : ${libelleEvaluation(p.niveau)} (${formatNote(p.note)})`),
     ...rdvPublies.map((r) => `RDV ${r.numero} : ${formatNote(r.note)}`),
   ];
-  journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence: null, type: "evaluation_publiee", detail: `${elements.join(" · ")} (BUT${annee})` });
-  notifier({
+  await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee, competence: null, type: "evaluation_publiee", detail: `${elements.join(" · ")} (BUT${annee})` });
+  const parcoursEtudiant = publiees.length ? (await getUtilisateur(etudiantId))?.parcours : undefined;
+  await notifier({
     destinataire_id: etudiantId,
     titre:
       n > 1
         ? `${n} notes publiées (BUT${annee})`
         : publiees.length
-          ? `Évaluation publiée : ${publiees[0].competence} ${competenceParCode(publiees[0].competence, getUtilisateur(etudiantId)?.parcours)?.nomCourt ?? ""} (BUT${annee})`
+          ? `Évaluation publiée : ${publiees[0].competence} ${competenceParCode(publiees[0].competence, parcoursEtudiant)?.nomCourt ?? ""} (BUT${annee})`
           : `Rendez-vous de suivi ${rdvPublies[0].numero} : note publiée (BUT${annee})`,
     detail: `${elements.join(" · ")} · par ${u!.prenom} ${u!.nom}`,
     lien: n > 1 || !publiees.length ? `/portfolio/${etudiantId}?annee=${annee}&onglet=suivi` : `/portfolio/${etudiantId}?annee=${annee}&onglet=${publiees[0].competence}`,
@@ -334,7 +335,7 @@ export async function publierAnnee(_: EtatFormulaire, formData: FormData): Promi
 
 export async function lireNotifications() {
   const u = await utilisateurCourant();
-  if (u) marquerNotificationsLues(u.id);
+  if (u) await marquerNotificationsLues(u.id);
 }
 
 // ---------- Administrateur ----------
@@ -342,11 +343,11 @@ export async function lireNotifications() {
 export async function affecterReferent(formData: FormData) {
   const u = await utilisateurCourant();
   if (!estAdmin(u)) return;
-  const etudiant = getUtilisateur(texte(formData, "etudiant"));
+  const etudiant = await getUtilisateur(texte(formData, "etudiant"));
   const referentId = texte(formData, "referent");
   if (!etudiant || etudiant.role !== "etudiant") return;
-  if (referentId && !estEnseignant(getUtilisateur(referentId) ?? null)) return;
-  definirReferent(etudiant.id, referentId || null);
+  if (referentId && !estEnseignant((await getUtilisateur(referentId)) ?? null)) return;
+  await definirReferent(etudiant.id, referentId || null);
   refresh();
 }
 
@@ -361,9 +362,9 @@ export async function ajouterEtudiant(_: EtatFormulaire, formData: FormData): Pr
   if (!nom || !prenom) return { ok: false, message: "Le nom et le prénom sont obligatoires." };
   if (!estAnneeBUT(annee)) return { ok: false, message: "Choisissez l'année de BUT." };
   if (!(PARCOURS_GEA as readonly string[]).includes(parcours)) return { ok: false, message: "Parcours inconnu." };
-  if (email && emailExiste(email)) return { ok: false, message: `L'adresse ${email} est déjà utilisée.` };
-  if (referentId && !estEnseignant(getUtilisateur(referentId) ?? null)) return { ok: false, message: "Référent inconnu." };
-  creerUtilisateur({ nom, prenom, email, role: "etudiant", annee_but: annee, groupe: texte(formData, "groupe"), parcours, referent_id: referentId || null });
+  if (email && (await emailExiste(email))) return { ok: false, message: `L'adresse ${email} est déjà utilisée.` };
+  if (referentId && !estEnseignant((await getUtilisateur(referentId)) ?? null)) return { ok: false, message: "Référent inconnu." };
+  await creerUtilisateur({ nom, prenom, email, role: "etudiant", annee_but: annee, groupe: texte(formData, "groupe"), parcours, referent_id: referentId || null });
   refresh();
   return { ok: true, message: `${prenom} ${nom} ajouté·e en BUT${annee}.` };
 }
@@ -375,8 +376,8 @@ export async function ajouterEnseignant(_: EtatFormulaire, formData: FormData): 
   const email = texte(formData, "email");
   const role = formData.get("admin") === "1" ? "admin" : "enseignant";
   if (!nom || !prenom) return { ok: false, message: "Le nom et le prénom sont obligatoires." };
-  if (email && emailExiste(email)) return { ok: false, message: `L'adresse ${email} est déjà utilisée.` };
-  creerUtilisateur({ nom, prenom, email, role });
+  if (email && (await emailExiste(email))) return { ok: false, message: `L'adresse ${email} est déjà utilisée.` };
+  await creerUtilisateur({ nom, prenom, email, role });
   refresh();
   return { ok: true, message: `${prenom} ${nom} ajouté·e${role === "admin" ? " comme administrateur" : ""}.` };
 }
@@ -385,7 +386,7 @@ export type EtatImport = {
   ok: boolean;
   message: string;
   apercu?: LigneApercu[];
-  bilan?: ReturnType<typeof appliquerImport>;
+  bilan?: Awaited<ReturnType<typeof appliquerImport>>;
 } | null;
 
 // Premier envoi : aperçu sans rien modifier. Second envoi (« importer ») : application des lignes valides.
@@ -396,11 +397,11 @@ export async function importerEtudiants(_: EtatImport, formData: FormData): Prom
   if (fichier.size > 5 * 1024 * 1024) return { ok: false, message: "Le fichier dépasse 5 Mo." };
   const lu = await lireFichier(fichier.name, Buffer.from(await fichier.arrayBuffer()));
   if ("erreur" in lu) return { ok: false, message: lu.erreur };
-  const apercu = analyserImport(lu.lignes, formData.get("creer_enseignants") === "1");
+  const apercu = await analyserImport(lu.lignes, formData.get("creer_enseignants") === "1");
   if (formData.get("etape") !== "importer") {
     return { ok: true, message: "Vérifiez l'aperçu, puis confirmez l'import.", apercu };
   }
-  const bilan = appliquerImport(apercu);
+  const bilan = await appliquerImport(apercu);
   refresh();
   return { ok: true, message: "Import terminé.", bilan };
 }
@@ -414,7 +415,7 @@ export async function enregistrerPreferences(_: EtatFormulaire, formData: FormDa
   // Le récapitulatif quotidien n'a de sens que pour les enseignants (activité de plusieurs étudiants).
   const permises: PreferenceCourriel[] = estEnseignant(u) ? ["immediat", "quotidien", "aucun"] : ["immediat", "aucun"];
   if (!permises.includes(pref)) return { ok: false, message: "Choix invalide." };
-  definirPreferenceCourriel(u.id, pref);
+  await definirPreferenceCourriel(u.id, pref);
   refresh();
   return {
     ok: true,
@@ -432,14 +433,14 @@ async function exigerAdmin() {
 export async function modifierCompteAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   const admin = await exigerAdmin();
   if (!admin) return { ok: false, message: "Réservé à l'administrateur." };
-  const compte = getUtilisateur(texte(formData, "id"));
+  const compte = await getUtilisateur(texte(formData, "id"));
   if (!compte) return { ok: false, message: "Compte introuvable." };
   const nom = texte(formData, "nom");
   const prenom = texte(formData, "prenom");
   const email = texte(formData, "email").toLowerCase();
   if (!nom || !prenom) return { ok: false, message: "Le nom et le prénom sont obligatoires." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, message: "Adresse mail invalide." };
-  if (email !== compte.email && emailExiste(email)) return { ok: false, message: `L'adresse ${email} est déjà utilisée.` };
+  if (email !== compte.email && (await emailExiste(email))) return { ok: false, message: `L'adresse ${email} est déjà utilisée.` };
 
   if (compte.role === "etudiant") {
     const annee = Number(formData.get("annee"));
@@ -447,21 +448,22 @@ export async function modifierCompteAction(_: EtatFormulaire, formData: FormData
     const referentId = texte(formData, "referent") || null;
     if (!estAnneeBUT(annee)) return { ok: false, message: "Année invalide." };
     if (!(PARCOURS_GEA as readonly string[]).includes(parcours)) return { ok: false, message: "Parcours inconnu." };
-    if (referentId && !estEnseignant(getUtilisateur(referentId) ?? null)) return { ok: false, message: "Référent inconnu." };
-    modifierCompte(compte.id, { nom, prenom, email, role: "etudiant", annee_but: annee, groupe: texte(formData, "groupe") || null, parcours, referent_id: referentId });
+    const referent = referentId ? await getUtilisateur(referentId) : null;
+    if (referentId && !estEnseignant(referent ?? null)) return { ok: false, message: "Référent inconnu." };
+    await modifierCompte(compte.id, { nom, prenom, email, role: "etudiant", annee_but: annee, groupe: texte(formData, "groupe") || null, parcours, referent_id: referentId });
     const changements = [
       compte.annee_but !== annee && `BUT${compte.annee_but} → BUT${annee}`,
       compte.parcours !== parcours && `parcours → ${parcours}`,
-      compte.referent_id !== referentId && `référent → ${referentId ? `${getUtilisateur(referentId)!.prenom} ${getUtilisateur(referentId)!.nom}` : "aucun"}`,
+      compte.referent_id !== referentId && `référent → ${referentId ? `${referent!.prenom} ${referent!.nom}` : "aucun"}`,
     ].filter(Boolean);
     if (changements.length) {
-      journaliser({ etudiant_id: compte.id, acteur_id: admin.id, annee: null, competence: null, type: "compte_modifie", detail: changements.join(" · ") });
+      await journaliser({ etudiant_id: compte.id, acteur_id: admin.id, annee: null, competence: null, type: "compte_modifie", detail: changements.join(" · ") });
     }
   } else {
     const role = formData.get("admin") === "1" ? "admin" : "enseignant";
     // Garde-fou : on ne se retire pas soi-même les droits d'administrateur.
     if (compte.id === admin.id && role !== "admin") return { ok: false, message: "Vous ne pouvez pas retirer vos propres droits d'administrateur." };
-    modifierCompte(compte.id, { nom, prenom, email, role, annee_but: null, groupe: null, parcours: null, referent_id: null });
+    await modifierCompte(compte.id, { nom, prenom, email, role, annee_but: null, groupe: null, parcours: null, referent_id: null });
   }
   refresh();
   return { ok: true, message: "Compte enregistré." };
@@ -470,13 +472,13 @@ export async function modifierCompteAction(_: EtatFormulaire, formData: FormData
 export async function changerActivationAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   const admin = await exigerAdmin();
   if (!admin) return { ok: false, message: "Réservé à l'administrateur." };
-  const compte = getUtilisateur(texte(formData, "id"));
+  const compte = await getUtilisateur(texte(formData, "id"));
   if (!compte) return { ok: false, message: "Compte introuvable." };
   const activer = formData.get("activer") === "1";
   if (!activer && compte.id === admin.id) return { ok: false, message: "Vous ne pouvez pas désactiver votre propre compte." };
-  const liberes = changerActivation(compte.id, activer);
+  const liberes = await changerActivation(compte.id, activer);
   if (compte.role === "etudiant") {
-    journaliser({ etudiant_id: compte.id, acteur_id: admin.id, annee: null, competence: null, type: "compte_modifie", detail: activer ? "compte réactivé" : "compte désactivé" });
+    await journaliser({ etudiant_id: compte.id, acteur_id: admin.id, annee: null, competence: null, type: "compte_modifie", detail: activer ? "compte réactivé" : "compte désactivé" });
   }
   refresh();
   return {
@@ -490,7 +492,7 @@ export async function changerActivationAction(_: EtatFormulaire, formData: FormD
 export async function supprimerCompteAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   const admin = await exigerAdmin();
   if (!admin) return { ok: false, message: "Réservé à l'administrateur." };
-  const compte = getUtilisateur(texte(formData, "id"));
+  const compte = await getUtilisateur(texte(formData, "id"));
   if (!compte) return { ok: false, message: "Compte introuvable." };
   if (compte.id === admin.id) return { ok: false, message: "Vous ne pouvez pas supprimer votre propre compte." };
   // Confirmation explicite : la suppression d'un étudiant efface tout son portfolio.
@@ -498,9 +500,9 @@ export async function supprimerCompteAction(_: EtatFormulaire, formData: FormDat
     return { ok: false, message: `Pour confirmer, saisissez le nom « ${compte.nom} ».` };
   }
   if (compte.role === "etudiant") {
-    supprimerEtudiant(compte.id);
-  } else if (!supprimerEnseignant(compte.id)) {
-    const h = historiqueCompte(compte.id);
+    await supprimerEtudiant(compte.id);
+  } else if (!(await supprimerEnseignant(compte.id))) {
+    const h = await historiqueCompte(compte.id);
     return {
       ok: false,
       message: `Suppression impossible : ce compte a ${h.evaluationsDonnees} évaluation(s) et ${h.actionsJournal} action(s) dans l'historique. Désactivez-le plutôt pour conserver la traçabilité.`,
@@ -520,8 +522,8 @@ export async function passageGroupe(_: EtatPassage, formData: FormData): Promise
 
   if (formData.get("operation") === "desactiver") {
     for (const id of ids) {
-      changerActivation(id, false);
-      journaliser({ etudiant_id: id, acteur_id: admin.id, annee: null, competence: null, type: "compte_modifie", detail: "sortie de formation : compte désactivé" });
+      await changerActivation(id, false);
+      await journaliser({ etudiant_id: id, acteur_id: admin.id, annee: null, competence: null, type: "compte_modifie", detail: "sortie de formation : compte désactivé" });
     }
     refresh();
     return { ok: true, message: `${ids.length} compte(s) désactivé(s) : données conservées, accès fermé.` };
@@ -539,22 +541,23 @@ export async function passageGroupe(_: EtatPassage, formData: FormData): Promise
   const referent = texte(formData, "referent");
   if (referent === "__aucun") c.referent = null;
   else if (referent) {
-    if (!estEnseignant(getUtilisateur(referent) ?? null)) return { ok: false, message: "Référent inconnu." };
+    if (!estEnseignant((await getUtilisateur(referent)) ?? null)) return { ok: false, message: "Référent inconnu." };
     c.referent = referent;
   }
   if (formData.get("changer_groupe") === "1") c.groupe = texte(formData, "groupe") || null;
   if (Object.keys(c).length === 0) return { ok: false, message: "Choisissez au moins une modification à appliquer." };
 
-  const r = appliquerChangementsGroupes(ids, c);
+  const r = await appliquerChangementsGroupes(ids, c);
+  const nomReferentChoisi = c.referent ? await getUtilisateur(c.referent) : null;
   for (const d of r.details) {
     const morceaux = [
       d.avant !== d.apres && `BUT${d.avant} → BUT${d.apres}`,
       c.parcours && `parcours ${c.parcours}`,
-      c.referent !== undefined && `référent ${c.referent ? `${getUtilisateur(c.referent)!.prenom} ${getUtilisateur(c.referent)!.nom}` : "retiré"}`,
+      c.referent !== undefined && `référent ${c.referent ? `${nomReferentChoisi!.prenom} ${nomReferentChoisi!.nom}` : "retiré"}`,
       c.groupe !== undefined && `groupe ${c.groupe ?? "retiré"}`,
     ].filter(Boolean);
     if (morceaux.length) {
-      journaliser({ etudiant_id: d.id, acteur_id: admin.id, annee: null, competence: null, type: d.avant !== d.apres ? "passage_annee" : "compte_modifie", detail: morceaux.join(" · ") });
+      await journaliser({ etudiant_id: d.id, acteur_id: admin.id, annee: null, competence: null, type: d.avant !== d.apres ? "passage_annee" : "compte_modifie", detail: morceaux.join(" · ") });
     }
   }
   refresh();

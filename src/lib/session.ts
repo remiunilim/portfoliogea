@@ -7,7 +7,7 @@ export const COOKIE_SESSION = "folio_utilisateur";
 
 export async function utilisateurCourant(): Promise<Utilisateur | null> {
   const id = (await cookies()).get(COOKIE_SESSION)?.value;
-  const u = id ? getUtilisateur(id) : undefined;
+  const u = id ? await getUtilisateur(id) : undefined;
   // Un compte désactivé n'a plus accès à l'outil (ses données restent conservées).
   return u && u.actif ? u : null;
 }
@@ -21,14 +21,14 @@ export function estAdmin(u: Utilisateur | null): boolean {
 }
 
 // L'administrateur suit tous les étudiants ; un enseignant ne suit que ceux dont il est le référent.
-export function suitEtudiant(u: Utilisateur | null, etudiantId: string): boolean {
+export async function suitEtudiant(u: Utilisateur | null, etudiantId: string): Promise<boolean> {
   if (estAdmin(u)) return true;
   if (u?.role !== "enseignant") return false;
-  return getUtilisateur(etudiantId)?.referent_id === u.id;
+  return (await getUtilisateur(etudiantId))?.referent_id === u.id;
 }
 
-export function peutConsulter(u: Utilisateur | null, etudiantId: string): boolean {
-  return !!u && (u.id === etudiantId || suitEtudiant(u, etudiantId));
+export async function peutConsulter(u: Utilisateur | null, etudiantId: string): Promise<boolean> {
+  return !!u && (u.id === etudiantId || (await suitEtudiant(u, etudiantId)));
 }
 
 // Un étudiant ne modifie que son propre portfolio, pour son année en cours et les années passées.

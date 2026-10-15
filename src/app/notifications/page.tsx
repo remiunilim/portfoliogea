@@ -9,7 +9,7 @@ import { dateRelative } from "@/lib/affichage";
 export default async function Notifications() {
   const u = await utilisateurCourant();
   if (!u) redirect("/connexion");
-  const notifications = getNotifications(u.id);
+  const notifications = await getNotifications(u.id);
   const nonLues = notifications.filter((n) => !n.lue).length;
 
   return (

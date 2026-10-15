@@ -1,0 +1,31 @@
+# Modèle de service systemd pour Folio GEA (Next.js lancé en arrière-plan, derrière Apache).
+# À adapter puis copier dans /etc/systemd/system/folio-gea.service sur le serveur de la DSI.
+#
+# Installation :
+#   sudo useradd --system --home /srv/folio-gea --shell /usr/sbin/nologin folio-gea
+#   sudo cp -r <projet> /srv/folio-gea && sudo chown -R folio-gea:folio-gea /srv/folio-gea
+#   cd /srv/folio-gea && sudo -u folio-gea npm ci && sudo -u folio-gea npm run build
+#   sudo cp deploy/folio-gea.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now folio-gea
+
+[Unit]
+Description=Folio GEA (Next.js)
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=folio-gea
+Group=folio-gea
+WorkingDirectory=/srv/folio-gea
+EnvironmentFile=/srv/folio-gea/.env.local
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 3000
+Restart=on-failure
+RestartSec=5
+# Dossier des PDF déposés et de la base de données locale (si conservé) :
+ReadWritePaths=/srv/folio-gea/data
+
+[Install]
+WantedBy=multi-user.target

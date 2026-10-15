@@ -13,12 +13,12 @@ export default async function Affectations() {
   const u = await utilisateurCourant();
   if (!u) redirect("/connexion");
   if (!estAdmin(u)) redirect("/");
-  const enseignants = listerEnseignants();
-  const etudiants = listerEtudiants();
+  const enseignants = await listerEnseignants();
+  const etudiants = await listerEtudiants();
   const nbSuivis = (id: string) => etudiants.filter((e) => e.referent_id === id).length;
   const sansReferent = etudiants.filter((e) => !e.referent_id).length;
-  const desactives = listerComptesDesactives();
-  const courriels = compterCourrielsEnAttente();
+  const desactives = await listerComptesDesactives();
+  const courriels = await compterCourrielsEnAttente();
 
   return (
     <>

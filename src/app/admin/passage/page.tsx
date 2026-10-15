@@ -11,9 +11,9 @@ export default async function Passage() {
   const u = await utilisateurCourant();
   if (!u) redirect("/connexion");
   if (!estAdmin(u)) redirect("/");
-  const enseignants = listerEnseignants();
+  const enseignants = await listerEnseignants();
   const nomEns = new Map(enseignants.map((e) => [e.id, `${e.prenom} ${e.nom}`]));
-  const etudiants = listerEtudiants().map((e) => ({
+  const etudiants = (await listerEtudiants()).map((e) => ({
     id: e.id,
     nom: `${e.nom} ${e.prenom}`,
     annee: e.annee_but ?? 1,

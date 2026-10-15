@@ -7,7 +7,7 @@ import { listerUtilisateurs } from "@/lib/db";
 
 export default async function Connexion() {
   await connection();
-  const utilisateurs = listerUtilisateurs();
+  const utilisateurs = await listerUtilisateurs();
   const enseignants = utilisateurs.filter((u) => u.role !== "etudiant");
   const etudiants = utilisateurs.filter((u) => u.role === "etudiant");
 

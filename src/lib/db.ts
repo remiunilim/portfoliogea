@@ -1,11 +1,10 @@
-import { DatabaseSync } from "node:sqlite";
+import mysql, { type Pool, type PoolConnection } from "mysql2/promise";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { genererPdfDemo } from "./pdf-demo";
 
-// Stockage local de la V1 : une base SQLite et un dossier de PDF.
-// À remplacer par le serveur de la DSI (PostgreSQL + stockage objet) lors du déploiement.
+// Stockage : MariaDB (connexion ci-dessous) pour les données, un dossier local pour les PDF déposés.
 export const DOSSIER_DONNEES = path.join(process.cwd(), "data");
 export const DOSSIER_FICHIERS = path.join(DOSSIER_DONNEES, "fichiers");
 
@@ -83,174 +82,168 @@ export type EntreeJournal = {
   cree_le: string;
 };
 
-const globalPourDb = globalThis as unknown as { __dbPortfolio?: DatabaseSync; __dbSchema?: number };
+// ---------- Connexion MariaDB ----------
+// Réglages dans .env.local (voir .env.example) : DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME.
 
-// À incrémenter à chaque évolution du schéma. En développement, la connexion survit aux
-// rechargements du code : ce numéro force la (re)création des tables et les migrations.
-const VERSION_SCHEMA = 7;
+const globalPourDb = globalThis as unknown as { __dbPoolPortfolio?: Promise<Pool> };
 
-export function db(): DatabaseSync {
-  if (globalPourDb.__dbPortfolio && globalPourDb.__dbSchema !== VERSION_SCHEMA) {
-    creerSchema(globalPourDb.__dbPortfolio);
-    migrer(globalPourDb.__dbPortfolio);
-    globalPourDb.__dbSchema = VERSION_SCHEMA;
-  }
-  if (!globalPourDb.__dbPortfolio) {
-    fs.mkdirSync(DOSSIER_FICHIERS, { recursive: true });
-    const base = new DatabaseSync(path.join(DOSSIER_DONNEES, "portfolio.db"));
-    base.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-    creerSchema(base);
-    migrer(base);
-    const { n } = base.prepare("SELECT COUNT(*) AS n FROM utilisateurs").get() as { n: number };
-    if (n === 0) peuplerDemo(base);
-    completerDemo(base);
-    completerDemoRendezVous(base);
-    completerDemoParcours(base);
-    // Étudiants créés avant l'ajout du parcours : seul le référentiel GEMA est configuré.
-    base.exec("UPDATE utilisateurs SET parcours = 'GEMA' WHERE role = 'etudiant' AND parcours IS NULL");
-    globalPourDb.__dbPortfolio = base;
-    globalPourDb.__dbSchema = VERSION_SCHEMA;
-  }
-  return globalPourDb.__dbPortfolio;
+async function creerPool(): Promise<Pool> {
+  const hote = process.env.DB_HOST || "localhost";
+  const port = Number(process.env.DB_PORT || 3306);
+  const utilisateur = process.env.DB_USER || "folio_gea";
+  const motDePasse = process.env.DB_PASSWORD || "";
+  const base = process.env.DB_NAME || "folio_gea";
+
+  // La base peut ne pas exister encore (premier démarrage) : on la crée si besoin, via une
+  // connexion à part, avant d'ouvrir le pool applicatif sur cette base.
+  const amorce = await mysql.createConnection({ host: hote, port, user: utilisateur, password: motDePasse });
+  await amorce.query(`CREATE DATABASE IF NOT EXISTS \`${base}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+  await amorce.end();
+
+  const pool = mysql.createPool({
+    host: hote,
+    port,
+    user: utilisateur,
+    password: motDePasse,
+    database: base,
+    charset: "utf8mb4_unicode_ci",
+    decimalNumbers: true, // les notes (DECIMAL) reviennent en nombre JS, pas en chaîne
+    waitForConnections: true,
+    connectionLimit: 10,
+    dateStrings: true,
+  });
+
+  await creerSchema(pool);
+  const [[{ n }]] = (await pool.query("SELECT COUNT(*) AS n FROM utilisateurs")) as [{ n: number }[], unknown];
+  if (n === 0) await peuplerDemo(pool);
+  await completerDemo(pool);
+  await completerDemoRendezVous(pool);
+  await completerDemoParcours(pool);
+  // Étudiants créés avant l'ajout du parcours : seul le référentiel GEMA est configuré.
+  await pool.query("UPDATE utilisateurs SET parcours = 'GEMA' WHERE role = 'etudiant' AND parcours IS NULL");
+
+  return pool;
 }
 
-function creerSchema(base: DatabaseSync) {
-  base.exec(`
-    CREATE TABLE IF NOT EXISTS utilisateurs (
-      id TEXT PRIMARY KEY,
-      nom TEXT NOT NULL,
-      prenom TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      role TEXT NOT NULL CHECK (role IN ('etudiant','enseignant','admin')),
-      annee_but INTEGER,
-      groupe TEXT
-    );
-    CREATE TABLE IF NOT EXISTS presentations (
-      etudiant_id TEXT PRIMARY KEY REFERENCES utilisateurs(id),
-      texte TEXT NOT NULL DEFAULT '',
-      projet_pro TEXT NOT NULL DEFAULT '',
-      maj_le TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS argumentaires (
-      etudiant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      annee INTEGER NOT NULL,
-      competence TEXT NOT NULL,
-      texte TEXT NOT NULL DEFAULT '',
-      maj_le TEXT NOT NULL,
+function obtenirPool(): Promise<Pool> {
+  if (!globalPourDb.__dbPoolPortfolio) globalPourDb.__dbPoolPortfolio = creerPool();
+  return globalPourDb.__dbPoolPortfolio;
+}
+
+async function creerSchema(pool: Pool) {
+  const tables = [
+    `CREATE TABLE IF NOT EXISTS utilisateurs (
+      id VARCHAR(64) PRIMARY KEY,
+      nom VARCHAR(255) NOT NULL,
+      prenom VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      role VARCHAR(20) NOT NULL CHECK (role IN ('etudiant','enseignant','admin')),
+      annee_but TINYINT,
+      groupe VARCHAR(50),
+      referent_id VARCHAR(64) REFERENCES utilisateurs(id),
+      actif TINYINT NOT NULL DEFAULT 1,
+      pref_courriel VARCHAR(20) NOT NULL DEFAULT 'immediat',
+      parcours VARCHAR(20)
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE IF NOT EXISTS presentations (
+      etudiant_id VARCHAR(64) PRIMARY KEY REFERENCES utilisateurs(id),
+      texte TEXT NOT NULL,
+      projet_pro TEXT NOT NULL,
+      maj_le VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE IF NOT EXISTS argumentaires (
+      etudiant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      annee TINYINT NOT NULL,
+      competence VARCHAR(10) NOT NULL,
+      texte TEXT NOT NULL,
+      maj_le VARCHAR(32) NOT NULL,
       PRIMARY KEY (etudiant_id, annee, competence)
-    );
-    CREATE TABLE IF NOT EXISTS traces (
-      id TEXT PRIMARY KEY,
-      etudiant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      annee INTEGER NOT NULL,
-      competence TEXT NOT NULL,
-      titre TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      fichier_nom TEXT NOT NULL,
-      taille INTEGER NOT NULL,
-      depose_le TEXT NOT NULL,
-      maj_le TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS evaluations (
-      etudiant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      annee INTEGER NOT NULL,
-      competence TEXT NOT NULL,
-      niveau TEXT NOT NULL,
-      commentaire TEXT NOT NULL DEFAULT '',
-      enseignant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      maj_le TEXT NOT NULL,
-      PRIMARY KEY (etudiant_id, annee, competence)
-    );
-    CREATE TABLE IF NOT EXISTS journal (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      etudiant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      acteur_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      annee INTEGER,
-      competence TEXT,
-      type TEXT NOT NULL,
-      detail TEXT NOT NULL DEFAULT '',
-      cree_le TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS journal_etudiant ON journal(etudiant_id, cree_le);
-    CREATE TABLE IF NOT EXISTS consultations (
-      enseignant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      etudiant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      vu_le TEXT NOT NULL,
-      PRIMARY KEY (enseignant_id, etudiant_id)
-    );
-    CREATE TABLE IF NOT EXISTS notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      destinataire_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      titre TEXT NOT NULL,
-      detail TEXT NOT NULL DEFAULT '',
-      lien TEXT NOT NULL DEFAULT '',
-      lue INTEGER NOT NULL DEFAULT 0,
-      cree_le TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS notifications_destinataire ON notifications(destinataire_id, lue);
-    -- Deux rendez-vous de suivi par étudiant et par année (note sur 20 + compte rendu),
-    -- avec un brouillon et une version publiée, comme les évaluations.
-    CREATE TABLE IF NOT EXISTS rendez_vous (
-      etudiant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      annee INTEGER NOT NULL,
-      numero INTEGER NOT NULL CHECK (numero IN (1, 2)),
-      date_rdv TEXT,
-      note REAL,
-      commentaire TEXT NOT NULL DEFAULT '',
-      enseignant_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      maj_le TEXT NOT NULL,
-      note_publiee REAL,
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE IF NOT EXISTS traces (
+      id VARCHAR(64) PRIMARY KEY,
+      etudiant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      annee TINYINT NOT NULL,
+      competence VARCHAR(10) NOT NULL,
+      titre VARCHAR(255) NOT NULL,
+      description TEXT NOT NULL,
+      fichier_nom VARCHAR(255) NOT NULL,
+      taille INT NOT NULL,
+      depose_le VARCHAR(32) NOT NULL,
+      maj_le VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE IF NOT EXISTS evaluations (
+      etudiant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      annee TINYINT NOT NULL,
+      competence VARCHAR(10) NOT NULL,
+      niveau VARCHAR(20) NOT NULL,
+      commentaire TEXT NOT NULL,
+      enseignant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      maj_le VARCHAR(32) NOT NULL,
+      niveau_publie VARCHAR(20),
       commentaire_publie TEXT,
-      publie_le TEXT,
+      publiee_le VARCHAR(32),
+      publiee_par VARCHAR(64),
+      note DECIMAL(4,2),
+      note_publiee DECIMAL(4,2),
+      PRIMARY KEY (etudiant_id, annee, competence)
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE IF NOT EXISTS journal (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      etudiant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      acteur_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      annee TINYINT,
+      competence VARCHAR(10),
+      type VARCHAR(40) NOT NULL,
+      detail TEXT NOT NULL,
+      cree_le VARCHAR(32) NOT NULL,
+      INDEX journal_etudiant (etudiant_id, cree_le)
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE IF NOT EXISTS consultations (
+      enseignant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      etudiant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      vu_le VARCHAR(32) NOT NULL,
+      PRIMARY KEY (enseignant_id, etudiant_id)
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      destinataire_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      titre VARCHAR(255) NOT NULL,
+      detail TEXT NOT NULL,
+      lien VARCHAR(255) NOT NULL,
+      lue TINYINT NOT NULL DEFAULT 0,
+      cree_le VARCHAR(32) NOT NULL,
+      INDEX notifications_destinataire (destinataire_id, lue)
+    ) ENGINE=InnoDB`,
+    // Deux rendez-vous de suivi par étudiant et par année (note sur 20 + compte rendu),
+    // avec un brouillon et une version publiée, comme les évaluations.
+    `CREATE TABLE IF NOT EXISTS rendez_vous (
+      etudiant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      annee TINYINT NOT NULL,
+      numero TINYINT NOT NULL CHECK (numero IN (1, 2)),
+      date_rdv VARCHAR(10),
+      note DECIMAL(4,2),
+      commentaire TEXT NOT NULL,
+      enseignant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      maj_le VARCHAR(32) NOT NULL,
+      note_publiee DECIMAL(4,2),
+      commentaire_publie TEXT,
+      publie_le VARCHAR(32),
       PRIMARY KEY (etudiant_id, annee, numero)
-    );
-    -- File d'attente des courriels : alimentée selon la préférence de chacun,
-    -- elle sera vidée par l'envoi SMTP de l'université une fois branché.
-    CREATE TABLE IF NOT EXISTS courriels (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      destinataire_id TEXT NOT NULL REFERENCES utilisateurs(id),
-      adresse TEXT NOT NULL,
-      sujet TEXT NOT NULL,
+    ) ENGINE=InnoDB`,
+    // File d'attente des courriels : alimentée selon la préférence de chacun,
+    // elle sera vidée par l'envoi SMTP de l'université une fois branché.
+    `CREATE TABLE IF NOT EXISTS courriels (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      destinataire_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      adresse VARCHAR(255) NOT NULL,
+      sujet VARCHAR(255) NOT NULL,
       corps TEXT NOT NULL,
-      mode TEXT NOT NULL CHECK (mode IN ('immediat','quotidien')),
-      statut TEXT NOT NULL DEFAULT 'en_attente',
-      cree_le TEXT NOT NULL
-    );
-  `);
-}
-
-// Ajoute les colonnes apparues après la première version, sans perdre les données existantes.
-function migrer(base: DatabaseSync) {
-  const colonnes = (table: string) =>
-    new Set((base.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
-  const utilisateurs = colonnes("utilisateurs");
-  if (!utilisateurs.has("referent_id")) {
-    base.exec("ALTER TABLE utilisateurs ADD COLUMN referent_id TEXT REFERENCES utilisateurs(id)");
-  }
-  if (!utilisateurs.has("actif")) {
-    base.exec("ALTER TABLE utilisateurs ADD COLUMN actif INTEGER NOT NULL DEFAULT 1");
-  }
-  if (!utilisateurs.has("pref_courriel")) {
-    // Étudiants : courriel à chaque évaluation publiée ; enseignants : à activer eux-mêmes.
-    base.exec("ALTER TABLE utilisateurs ADD COLUMN pref_courriel TEXT NOT NULL DEFAULT 'immediat'");
-    base.exec("UPDATE utilisateurs SET pref_courriel = 'aucun' WHERE role IN ('enseignant','admin')");
-  }
-  if (!utilisateurs.has("parcours")) {
-    base.exec("ALTER TABLE utilisateurs ADD COLUMN parcours TEXT");
-  }
-  const evaluations = colonnes("evaluations");
-  for (const col of ["niveau_publie", "commentaire_publie", "publiee_le", "publiee_par"]) {
-    if (!evaluations.has(col)) base.exec(`ALTER TABLE evaluations ADD COLUMN ${col} TEXT`);
-  }
-  if (!evaluations.has("note")) {
-    base.exec("ALTER TABLE evaluations ADD COLUMN note REAL");
-    base.exec("ALTER TABLE evaluations ADD COLUMN note_publiee REAL");
-    // Jeu de démonstration : notes des évaluations déjà publiées.
-    base.exec(`UPDATE evaluations SET note = 14, note_publiee = CASE WHEN publiee_le IS NOT NULL THEN 14 END
-               WHERE etudiant_id = 'etu-fournier' AND annee = 1 AND competence = 'C1'`);
-    base.exec(`UPDATE evaluations SET note = 10.5, note_publiee = CASE WHEN publiee_le IS NOT NULL THEN 10.5 END
-               WHERE etudiant_id = 'etu-garcia' AND annee = 2 AND competence = 'C2'`);
-  }
+      mode VARCHAR(20) NOT NULL CHECK (mode IN ('immediat','quotidien')),
+      statut VARCHAR(20) NOT NULL DEFAULT 'en_attente',
+      cree_le VARCHAR(32) NOT NULL
+    ) ENGINE=InnoDB`,
+  ];
+  for (const sql of tables) await pool.query(sql);
 }
 
 const maintenant = () => new Date().toISOString();
@@ -261,23 +254,27 @@ export function cheminFichier(traceId: string) {
 
 // ---------- Lecture ----------
 
-export function getUtilisateur(id: string): Utilisateur | undefined {
-  return db().prepare("SELECT * FROM utilisateurs WHERE id = ?").get(id) as Utilisateur | undefined;
+export async function getUtilisateur(id: string): Promise<Utilisateur | undefined> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM utilisateurs WHERE id = ?", [id]);
+  return (lignes as Utilisateur[])[0];
 }
 
-export function listerUtilisateurs(): Utilisateur[] {
-  return db()
-    .prepare("SELECT * FROM utilisateurs WHERE actif = 1 ORDER BY role DESC, annee_but, nom")
-    .all() as Utilisateur[];
+export async function listerUtilisateurs(): Promise<Utilisateur[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM utilisateurs WHERE actif = 1 ORDER BY role DESC, annee_but, nom");
+  return lignes as Utilisateur[];
 }
 
-export function listerComptesDesactives(): Utilisateur[] {
-  return db().prepare("SELECT * FROM utilisateurs WHERE actif = 0 ORDER BY role DESC, nom, prenom").all() as Utilisateur[];
+export async function listerComptesDesactives(): Promise<Utilisateur[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM utilisateurs WHERE actif = 0 ORDER BY role DESC, nom, prenom");
+  return lignes as Utilisateur[];
 }
 
-export function listerEtudiants(
+export async function listerEtudiants(
   filtre: { anneeBut?: number; referentId?: string; inclureDesactives?: boolean } = {},
-): Utilisateur[] {
+): Promise<Utilisateur[]> {
   const conditions = ["role = 'etudiant'"];
   if (!filtre.inclureDesactives) conditions.push("actif = 1");
   const params: string[] = [];
@@ -289,48 +286,58 @@ export function listerEtudiants(
     conditions.push("referent_id = ?");
     params.push(filtre.referentId);
   }
-  return db()
-    .prepare(`SELECT * FROM utilisateurs WHERE ${conditions.join(" AND ")} ORDER BY annee_but, nom, prenom`)
-    .all(...params) as Utilisateur[];
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    `SELECT * FROM utilisateurs WHERE ${conditions.join(" AND ")} ORDER BY annee_but, nom, prenom`,
+    params,
+  );
+  return lignes as Utilisateur[];
 }
 
-export function listerEnseignants(): Utilisateur[] {
-  return db()
-    .prepare("SELECT * FROM utilisateurs WHERE role IN ('enseignant','admin') AND actif = 1 ORDER BY nom, prenom")
-    .all() as Utilisateur[];
+export async function listerEnseignants(): Promise<Utilisateur[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    "SELECT * FROM utilisateurs WHERE role IN ('enseignant','admin') AND actif = 1 ORDER BY nom, prenom",
+  );
+  return lignes as Utilisateur[];
 }
 
-export function definirReferent(etudiantId: string, referentId: string | null) {
-  db()
-    .prepare("UPDATE utilisateurs SET referent_id = ? WHERE id = ? AND role = 'etudiant'")
-    .run(referentId, etudiantId);
+export async function definirReferent(etudiantId: string, referentId: string | null) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE utilisateurs SET referent_id = ? WHERE id = ? AND role = 'etudiant'", [referentId, etudiantId]);
 }
 
-export function getPresentation(etudiantId: string) {
-  return db().prepare("SELECT * FROM presentations WHERE etudiant_id = ?").get(etudiantId) as
-    | { etudiant_id: string; texte: string; projet_pro: string; maj_le: string }
-    | undefined;
+export async function getPresentation(etudiantId: string) {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM presentations WHERE etudiant_id = ?", [etudiantId]);
+  return (lignes as { etudiant_id: string; texte: string; projet_pro: string; maj_le: string }[])[0];
 }
 
-export function getArgumentaires(etudiantId: string): Argumentaire[] {
-  return db().prepare("SELECT * FROM argumentaires WHERE etudiant_id = ?").all(etudiantId) as Argumentaire[];
+export async function getArgumentaires(etudiantId: string): Promise<Argumentaire[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM argumentaires WHERE etudiant_id = ?", [etudiantId]);
+  return lignes as Argumentaire[];
 }
 
-export function getTraces(etudiantId: string): Trace[] {
-  return db()
-    .prepare("SELECT * FROM traces WHERE etudiant_id = ? ORDER BY depose_le")
-    .all(etudiantId) as Trace[];
+export async function getTraces(etudiantId: string): Promise<Trace[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM traces WHERE etudiant_id = ? ORDER BY depose_le", [etudiantId]);
+  return lignes as Trace[];
 }
 
-export function getTrace(id: string): Trace | undefined {
-  return db().prepare("SELECT * FROM traces WHERE id = ?").get(id) as Trace | undefined;
+export async function getTrace(id: string): Promise<Trace | undefined> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM traces WHERE id = ?", [id]);
+  return (lignes as Trace[])[0];
 }
 
-export function getEvaluations(etudiantId: string): Evaluation[] {
-  return db().prepare("SELECT * FROM evaluations WHERE etudiant_id = ?").all(etudiantId) as Evaluation[];
+export async function getEvaluations(etudiantId: string): Promise<Evaluation[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM evaluations WHERE etudiant_id = ?", [etudiantId]);
+  return lignes as Evaluation[];
 }
 
-export function getJournal(
+export async function getJournal(
   opts: { etudiantId?: string; anneeBut?: number; referentId?: string; limite?: number } = {},
 ) {
   const conditions: string[] = [];
@@ -349,143 +356,158 @@ export function getJournal(
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   params.push(opts.limite ?? 50);
-  return db()
-    .prepare(
-      `SELECT j.*, e.prenom || ' ' || e.nom AS etudiant_nom, a.prenom || ' ' || a.nom AS acteur_nom, a.role AS acteur_role
-       FROM journal j
-       JOIN utilisateurs e ON e.id = j.etudiant_id
-       JOIN utilisateurs a ON a.id = j.acteur_id
-       ${where}
-       ORDER BY j.cree_le DESC, j.id DESC LIMIT ?`,
-    )
-    .all(...params) as (EntreeJournal & { etudiant_nom: string; acteur_nom: string; acteur_role: Role })[];
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    `SELECT j.*, CONCAT(e.prenom, ' ', e.nom) AS etudiant_nom, CONCAT(a.prenom, ' ', a.nom) AS acteur_nom, a.role AS acteur_role
+     FROM journal j
+     JOIN utilisateurs e ON e.id = j.etudiant_id
+     JOIN utilisateurs a ON a.id = j.acteur_id
+     ${where}
+     ORDER BY j.cree_le DESC, j.id DESC LIMIT ?`,
+    params,
+  );
+  return lignes as (EntreeJournal & { etudiant_nom: string; acteur_nom: string; acteur_role: Role })[];
 }
 
-export function getDerniereConsultation(enseignantId: string, etudiantId: string): string | null {
-  const ligne = db()
-    .prepare("SELECT vu_le FROM consultations WHERE enseignant_id = ? AND etudiant_id = ?")
-    .get(enseignantId, etudiantId) as { vu_le: string } | undefined;
-  return ligne?.vu_le ?? null;
+export async function getDerniereConsultation(enseignantId: string, etudiantId: string): Promise<string | null> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT vu_le FROM consultations WHERE enseignant_id = ? AND etudiant_id = ?", [
+    enseignantId,
+    etudiantId,
+  ]);
+  return (lignes as { vu_le: string }[])[0]?.vu_le ?? null;
 }
 
 // Dernière modification faite par l'étudiant, par cellule (année × compétence).
-export function getDernieresModifsEtudiant(etudiantId: string): Map<string, string> {
-  const lignes = db()
-    .prepare(
-      `SELECT annee, competence, MAX(cree_le) AS derniere FROM journal
-       WHERE etudiant_id = ? AND acteur_id = ? AND competence IS NOT NULL
-       GROUP BY annee, competence`,
-    )
-    .all(etudiantId, etudiantId) as { annee: number; competence: string; derniere: string }[];
-  return new Map(lignes.map((l) => [`${l.annee}-${l.competence}`, l.derniere]));
+export async function getDernieresModifsEtudiant(etudiantId: string): Promise<Map<string, string>> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    `SELECT annee, competence, MAX(cree_le) AS derniere FROM journal
+     WHERE etudiant_id = ? AND acteur_id = ? AND competence IS NOT NULL
+     GROUP BY annee, competence`,
+    [etudiantId, etudiantId],
+  );
+  return new Map((lignes as { annee: number; competence: string; derniere: string }[]).map((l) => [`${l.annee}-${l.competence}`, l.derniere]));
 }
 
 // ---------- Écriture ----------
 
-export function journaliser(e: Omit<EntreeJournal, "id" | "cree_le">) {
-  db()
-    .prepare(
-      "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    )
-    .run(e.etudiant_id, e.acteur_id, e.annee, e.competence, e.type, e.detail, maintenant());
+export async function journaliser(e: Omit<EntreeJournal, "id" | "cree_le">) {
+  const pool = await obtenirPool();
+  await pool.query(
+    "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [e.etudiant_id, e.acteur_id, e.annee, e.competence, e.type, e.detail, maintenant()],
+  );
 }
 
-export function enregistrerPresentation(etudiantId: string, texte: string, projetPro: string) {
-  db()
-    .prepare(
-      `INSERT INTO presentations (etudiant_id, texte, projet_pro, maj_le) VALUES (?, ?, ?, ?)
-       ON CONFLICT(etudiant_id) DO UPDATE SET texte = excluded.texte, projet_pro = excluded.projet_pro, maj_le = excluded.maj_le`,
-    )
-    .run(etudiantId, texte, projetPro, maintenant());
+export async function enregistrerPresentation(etudiantId: string, texte: string, projetPro: string) {
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO presentations (etudiant_id, texte, projet_pro, maj_le) VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE texte = VALUES(texte), projet_pro = VALUES(projet_pro), maj_le = VALUES(maj_le)`,
+    [etudiantId, texte, projetPro, maintenant()],
+  );
 }
 
-export function enregistrerArgumentaire(etudiantId: string, annee: number, competence: string, texte: string) {
-  db()
-    .prepare(
-      `INSERT INTO argumentaires (etudiant_id, annee, competence, texte, maj_le) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(etudiant_id, annee, competence) DO UPDATE SET texte = excluded.texte, maj_le = excluded.maj_le`,
-    )
-    .run(etudiantId, annee, competence, texte, maintenant());
+export async function enregistrerArgumentaire(etudiantId: string, annee: number, competence: string, texte: string) {
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO argumentaires (etudiant_id, annee, competence, texte, maj_le) VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE texte = VALUES(texte), maj_le = VALUES(maj_le)`,
+    [etudiantId, annee, competence, texte, maintenant()],
+  );
 }
 
-export function ajouterTrace(t: Omit<Trace, "id" | "depose_le" | "maj_le">, contenu: Buffer): string {
+export async function ajouterTrace(t: Omit<Trace, "id" | "depose_le" | "maj_le">, contenu: Buffer): Promise<string> {
   const id = randomUUID();
   fs.writeFileSync(cheminFichier(id), contenu);
   const date = maintenant();
-  db()
-    .prepare(
-      `INSERT INTO traces (id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(id, t.etudiant_id, t.annee, t.competence, t.titre, t.description, t.fichier_nom, t.taille, date, date);
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO traces (id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, t.etudiant_id, t.annee, t.competence, t.titre, t.description, t.fichier_nom, t.taille, date, date],
+  );
   return id;
 }
 
-export function modifierTrace(
+export async function modifierTrace(
   id: string,
   champs: { titre: string; description: string },
   fichier?: { nom: string; contenu: Buffer },
 ) {
+  const pool = await obtenirPool();
   if (fichier) {
     fs.writeFileSync(cheminFichier(id), fichier.contenu);
-    db()
-      .prepare("UPDATE traces SET fichier_nom = ?, taille = ? WHERE id = ?")
-      .run(fichier.nom, fichier.contenu.length, id);
+    await pool.query("UPDATE traces SET fichier_nom = ?, taille = ? WHERE id = ?", [fichier.nom, fichier.contenu.length, id]);
   }
-  db()
-    .prepare("UPDATE traces SET titre = ?, description = ?, maj_le = ? WHERE id = ?")
-    .run(champs.titre, champs.description, maintenant(), id);
+  await pool.query("UPDATE traces SET titre = ?, description = ?, maj_le = ? WHERE id = ?", [
+    champs.titre,
+    champs.description,
+    maintenant(),
+    id,
+  ]);
 }
 
-export function supprimerTrace(id: string) {
-  db().prepare("DELETE FROM traces WHERE id = ?").run(id);
+export async function supprimerTrace(id: string) {
+  const pool = await obtenirPool();
+  await pool.query("DELETE FROM traces WHERE id = ?", [id]);
   fs.rmSync(cheminFichier(id), { force: true });
 }
 
-export function enregistrerEvaluation(
+export async function enregistrerEvaluation(
   e: Pick<Evaluation, "etudiant_id" | "annee" | "competence" | "niveau" | "note" | "commentaire" | "enseignant_id">,
 ) {
-  db()
-    .prepare(
-      `INSERT INTO evaluations (etudiant_id, annee, competence, niveau, note, commentaire, enseignant_id, maj_le)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(etudiant_id, annee, competence) DO UPDATE SET
-         niveau = excluded.niveau, note = excluded.note, commentaire = excluded.commentaire,
-         enseignant_id = excluded.enseignant_id, maj_le = excluded.maj_le`,
-    )
-    .run(e.etudiant_id, e.annee, e.competence, e.niveau, e.note, e.commentaire, e.enseignant_id, maintenant());
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO evaluations (etudiant_id, annee, competence, niveau, note, commentaire, enseignant_id, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       niveau = VALUES(niveau), note = VALUES(note), commentaire = VALUES(commentaire),
+       enseignant_id = VALUES(enseignant_id), maj_le = VALUES(maj_le)`,
+    [e.etudiant_id, e.annee, e.competence, e.niveau, e.note, e.commentaire, e.enseignant_id, maintenant()],
+  );
 }
 
 // Évaluations en brouillon qui ne peuvent pas être publiées faute de note.
-export function evaluationsSansNote(etudiantId: string, annee: number): string[] {
-  return (
-    db()
-      .prepare("SELECT competence FROM evaluations WHERE etudiant_id = ? AND annee = ? AND niveau <> 'non_evalue' AND note IS NULL")
-      .all(etudiantId, annee) as { competence: string }[]
-  ).map((r) => r.competence);
+export async function evaluationsSansNote(etudiantId: string, annee: number): Promise<string[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    "SELECT competence FROM evaluations WHERE etudiant_id = ? AND annee = ? AND niveau <> 'non_evalue' AND note IS NULL",
+    [etudiantId, annee],
+  );
+  return (lignes as { competence: string }[]).map((r) => r.competence);
 }
 
 // Publie le brouillon (niveau, note, commentaire) : l'étudiant le voit désormais.
 // Une évaluation sans note n'est pas publiable. Renvoie les évaluations publiées (vide si rien à publier).
-export function publierEvaluations(
+export async function publierEvaluations(
   cible: { etudiantId: string; annee: number; competence?: string },
   publieePar: string,
-): { competence: string; niveau: string; note: number }[] {
+): Promise<{ competence: string; niveau: string; note: number }[]> {
   const conditions = ["etudiant_id = ?", "annee = ?"];
   const params: (string | number)[] = [cible.etudiantId, cible.annee];
   if (cible.competence) {
     conditions.push("competence = ?");
     params.push(cible.competence);
   }
-  return db()
-    .prepare(
+  const where = conditions.join(" AND ");
+  const critereChangement =
+    "niveau <> 'non_evalue' AND note IS NOT NULL AND (NOT (niveau_publie <=> niveau) OR NOT (note_publiee <=> note) OR NOT (commentaire_publie <=> commentaire))";
+  const pool = await obtenirPool();
+  const [avant] = await pool.query(
+    `SELECT competence, niveau, note FROM evaluations WHERE ${where} AND ${critereChangement}`,
+    params,
+  );
+  const lignes = avant as { competence: string; niveau: string; note: number }[];
+  if (lignes.length) {
+    await pool.query(
       `UPDATE evaluations SET niveau_publie = niveau, note_publiee = note, commentaire_publie = commentaire, publiee_le = ?, publiee_par = ?
-       WHERE ${conditions.join(" AND ")}
-         AND niveau <> 'non_evalue' AND note IS NOT NULL
-         AND (niveau_publie IS NOT niveau OR note_publiee IS NOT note OR commentaire_publie IS NOT commentaire)
-       RETURNING competence, niveau, note`,
-    )
-    .all(maintenant(), publieePar, ...params) as { competence: string; niveau: string; note: number }[];
+       WHERE ${where} AND ${critereChangement}`,
+      [maintenant(), publieePar, ...params],
+    );
+  }
+  return lignes;
 }
 
 // ---------- Rendez-vous de suivi ----------
@@ -508,38 +530,51 @@ export function rendezVousNonPublie(r: RendezVous | undefined): boolean {
   return !!r && r.note !== null && (r.note_publiee !== r.note || (r.commentaire_publie ?? "") !== r.commentaire);
 }
 
-export function getRendezVous(etudiantId: string): RendezVous[] {
-  return db().prepare("SELECT * FROM rendez_vous WHERE etudiant_id = ? ORDER BY annee, numero").all(etudiantId) as RendezVous[];
+export async function getRendezVous(etudiantId: string): Promise<RendezVous[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM rendez_vous WHERE etudiant_id = ? ORDER BY annee, numero", [etudiantId]);
+  return lignes as RendezVous[];
 }
 
-export function enregistrerRendezVous(r: Pick<RendezVous, "etudiant_id" | "annee" | "numero" | "date_rdv" | "note" | "commentaire" | "enseignant_id">) {
-  db()
-    .prepare(
-      `INSERT INTO rendez_vous (etudiant_id, annee, numero, date_rdv, note, commentaire, enseignant_id, maj_le)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(etudiant_id, annee, numero) DO UPDATE SET
-         date_rdv = excluded.date_rdv, note = excluded.note, commentaire = excluded.commentaire,
-         enseignant_id = excluded.enseignant_id, maj_le = excluded.maj_le`,
-    )
-    .run(r.etudiant_id, r.annee, r.numero, r.date_rdv, r.note, r.commentaire, r.enseignant_id, maintenant());
+export async function enregistrerRendezVous(
+  r: Pick<RendezVous, "etudiant_id" | "annee" | "numero" | "date_rdv" | "note" | "commentaire" | "enseignant_id">,
+) {
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO rendez_vous (etudiant_id, annee, numero, date_rdv, note, commentaire, enseignant_id, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       date_rdv = VALUES(date_rdv), note = VALUES(note), commentaire = VALUES(commentaire),
+       enseignant_id = VALUES(enseignant_id), maj_le = VALUES(maj_le)`,
+    [r.etudiant_id, r.annee, r.numero, r.date_rdv, r.note, r.commentaire, r.enseignant_id, maintenant()],
+  );
 }
 
 // Publie la note et le compte rendu du (ou des) rendez-vous ; renvoie ceux publiés.
-export function publierRendezVous(cible: { etudiantId: string; annee: number; numero?: number }): { numero: number; note: number }[] {
+export async function publierRendezVous(cible: {
+  etudiantId: string;
+  annee: number;
+  numero?: number;
+}): Promise<{ numero: number; note: number }[]> {
   const conditions = ["etudiant_id = ?", "annee = ?"];
   const params: (string | number)[] = [cible.etudiantId, cible.annee];
   if (cible.numero) {
     conditions.push("numero = ?");
     params.push(cible.numero);
   }
-  return db()
-    .prepare(
+  const where = conditions.join(" AND ");
+  const critereChangement = "note IS NOT NULL AND (NOT (note_publiee <=> note) OR NOT (commentaire_publie <=> commentaire))";
+  const pool = await obtenirPool();
+  const [avant] = await pool.query(`SELECT numero, note FROM rendez_vous WHERE ${where} AND ${critereChangement}`, params);
+  const lignes = avant as { numero: number; note: number }[];
+  if (lignes.length) {
+    await pool.query(
       `UPDATE rendez_vous SET note_publiee = note, commentaire_publie = commentaire, publie_le = ?
-       WHERE ${conditions.join(" AND ")} AND note IS NOT NULL
-         AND (note_publiee IS NOT note OR commentaire_publie IS NOT commentaire)
-       RETURNING numero, note`,
-    )
-    .all(maintenant(), ...params) as { numero: number; note: number }[];
+       WHERE ${where} AND ${critereChangement}`,
+      [maintenant(), ...params],
+    );
+  }
+  return lignes;
 }
 
 // ---------- Notifications ----------
@@ -555,64 +590,81 @@ export type Notification = {
 };
 
 // Notification dans l'outil, doublée d'un courriel en file d'attente si le destinataire l'a choisi.
-export function notifier(n: Pick<Notification, "destinataire_id" | "titre" | "detail" | "lien">) {
-  db()
-    .prepare("INSERT INTO notifications (destinataire_id, titre, detail, lien, cree_le) VALUES (?, ?, ?, ?, ?)")
-    .run(n.destinataire_id, n.titre, n.detail, n.lien, maintenant());
-  mettreEnFileCourriel(n);
+export async function notifier(n: Pick<Notification, "destinataire_id" | "titre" | "detail" | "lien">) {
+  const pool = await obtenirPool();
+  await pool.query("INSERT INTO notifications (destinataire_id, titre, detail, lien, cree_le) VALUES (?, ?, ?, ?, ?)", [
+    n.destinataire_id,
+    n.titre,
+    n.detail,
+    n.lien,
+    maintenant(),
+  ]);
+  await mettreEnFileCourriel(n);
 }
 
-function mettreEnFileCourriel(n: Pick<Notification, "destinataire_id" | "titre" | "detail" | "lien">) {
-  const d = getUtilisateur(n.destinataire_id);
+async function mettreEnFileCourriel(n: Pick<Notification, "destinataire_id" | "titre" | "detail" | "lien">) {
+  const d = await getUtilisateur(n.destinataire_id);
   if (!d || !d.actif || d.pref_courriel === "aucun" || d.email.endsWith(".a-renseigner")) return;
-  db()
-    .prepare("INSERT INTO courriels (destinataire_id, adresse, sujet, corps, mode, cree_le) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(d.id, d.email, `[Folio GEA] ${n.titre}`, `${n.detail}\n\nVoir dans Folio GEA : ${n.lien}`, d.pref_courriel, maintenant());
+  const pool = await obtenirPool();
+  await pool.query(
+    "INSERT INTO courriels (destinataire_id, adresse, sujet, corps, mode, cree_le) VALUES (?, ?, ?, ?, ?, ?)",
+    [d.id, d.email, `[Folio GEA] ${n.titre}`, `${n.detail}\n\nVoir dans Folio GEA : ${n.lien}`, d.pref_courriel, maintenant()],
+  );
 }
 
 // Notification du référent après un dépôt de l'étudiant. Tant que la précédente n'est pas lue,
 // on la met à jour au lieu d'en créer une nouvelle : pas d'avalanche pendant que l'étudiant travaille.
-export function notifierReferent(etudiant: Utilisateur, titre: string, detail: string, lien: string) {
+export async function notifierReferent(etudiant: Utilisateur, titre: string, detail: string, lien: string) {
   if (!etudiant.referent_id) return;
-  const enCours = db()
-    .prepare("SELECT id, detail FROM notifications WHERE destinataire_id = ? AND lien = ? AND lue = 0")
-    .get(etudiant.referent_id, lien) as { id: number; detail: string } | undefined;
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT id, detail FROM notifications WHERE destinataire_id = ? AND lien = ? AND lue = 0", [
+    etudiant.referent_id,
+    lien,
+  ]);
+  const enCours = (lignes as { id: number; detail: string }[])[0];
   if (enCours) {
     const nb = Number(enCours.detail.match(/^(\d+) modifications/)?.[1] ?? 1) + 1;
-    db()
-      .prepare("UPDATE notifications SET titre = ?, detail = ?, cree_le = ? WHERE id = ?")
-      .run(titre, `${nb} modifications depuis votre dernière lecture · dernière : ${detail}`, maintenant(), enCours.id);
+    await pool.query("UPDATE notifications SET titre = ?, detail = ?, cree_le = ? WHERE id = ?", [
+      titre,
+      `${nb} modifications depuis votre dernière lecture · dernière : ${detail}`,
+      maintenant(),
+      enCours.id,
+    ]);
     return;
   }
-  notifier({ destinataire_id: etudiant.referent_id, titre, detail, lien });
+  await notifier({ destinataire_id: etudiant.referent_id, titre, detail, lien });
 }
 
-export function compterCourrielsEnAttente(): { immediat: number; quotidien: number } {
-  const lignes = db()
-    .prepare("SELECT mode, COUNT(*) AS n FROM courriels WHERE statut = 'en_attente' GROUP BY mode")
-    .all() as { mode: "immediat" | "quotidien"; n: number }[];
-  return { immediat: lignes.find((l) => l.mode === "immediat")?.n ?? 0, quotidien: lignes.find((l) => l.mode === "quotidien")?.n ?? 0 };
+export async function compterCourrielsEnAttente(): Promise<{ immediat: number; quotidien: number }> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT mode, COUNT(*) AS n FROM courriels WHERE statut = 'en_attente' GROUP BY mode");
+  const l = lignes as { mode: "immediat" | "quotidien"; n: number }[];
+  return { immediat: l.find((x) => x.mode === "immediat")?.n ?? 0, quotidien: l.find((x) => x.mode === "quotidien")?.n ?? 0 };
 }
 
-export function definirPreferenceCourriel(id: string, pref: PreferenceCourriel) {
-  db().prepare("UPDATE utilisateurs SET pref_courriel = ? WHERE id = ?").run(pref, id);
+export async function definirPreferenceCourriel(id: string, pref: PreferenceCourriel) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE utilisateurs SET pref_courriel = ? WHERE id = ?", [pref, id]);
 }
 
-export function getNotifications(destinataireId: string, limite = 50): Notification[] {
-  return db()
-    .prepare("SELECT * FROM notifications WHERE destinataire_id = ? ORDER BY cree_le DESC, id DESC LIMIT ?")
-    .all(destinataireId, limite) as Notification[];
+export async function getNotifications(destinataireId: string, limite = 50): Promise<Notification[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT * FROM notifications WHERE destinataire_id = ? ORDER BY cree_le DESC, id DESC LIMIT ?", [
+    destinataireId,
+    limite,
+  ]);
+  return lignes as Notification[];
 }
 
-export function compterNotificationsNonLues(destinataireId: string): number {
-  const { n } = db()
-    .prepare("SELECT COUNT(*) AS n FROM notifications WHERE destinataire_id = ? AND lue = 0")
-    .get(destinataireId) as { n: number };
-  return n;
+export async function compterNotificationsNonLues(destinataireId: string): Promise<number> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT COUNT(*) AS n FROM notifications WHERE destinataire_id = ? AND lue = 0", [destinataireId]);
+  return (lignes as { n: number }[])[0].n;
 }
 
-export function marquerNotificationsLues(destinataireId: string) {
-  db().prepare("UPDATE notifications SET lue = 1 WHERE destinataire_id = ? AND lue = 0").run(destinataireId);
+export async function marquerNotificationsLues(destinataireId: string) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE notifications SET lue = 1 WHERE destinataire_id = ? AND lue = 0", [destinataireId]);
 }
 
 // ---------- Comptes (ajout manuel et import) ----------
@@ -629,65 +681,89 @@ export type NouvelUtilisateur = {
 };
 
 // Sans adresse fournie, on en génère une provisoire : la vraie viendra de l'annuaire (CAS).
-function emailProvisoire(prenom: string, nom: string, role: Role) {
+async function emailProvisoire(prenom: string, nom: string, role: Role) {
   const base = `${prenom}.${nom}`
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9.]+/g, "-");
   const domaine = role === "etudiant" ? "etu.a-renseigner" : "a-renseigner";
+  const pool = await obtenirPool();
   let email = `${base}@${domaine}`;
-  for (let i = 2; db().prepare("SELECT 1 FROM utilisateurs WHERE email = ?").get(email); i++) email = `${base}${i}@${domaine}`;
+  for (let i = 2; ; i++) {
+    const [lignes] = await pool.query("SELECT 1 FROM utilisateurs WHERE email = ?", [email]);
+    if ((lignes as unknown[]).length === 0) break;
+    email = `${base}${i}@${domaine}`;
+  }
   return email;
 }
 
-export function emailExiste(email: string): boolean {
-  return !!db().prepare("SELECT 1 FROM utilisateurs WHERE lower(email) = lower(?)").get(email);
+export async function emailExiste(email: string): Promise<boolean> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT 1 FROM utilisateurs WHERE LOWER(email) = LOWER(?)", [email]);
+  return (lignes as unknown[]).length > 0;
 }
 
-export function creerUtilisateur(u: NouvelUtilisateur): string {
+export async function creerUtilisateur(u: NouvelUtilisateur): Promise<string> {
   const id = `${u.role === "etudiant" ? "etu" : "ens"}-${randomUUID().slice(0, 8)}`;
-  db()
-    .prepare(
-      `INSERT INTO utilisateurs (id, nom, prenom, email, role, annee_but, groupe, parcours, referent_id, pref_courriel)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO utilisateurs (id, nom, prenom, email, role, annee_but, groupe, parcours, referent_id, pref_courriel)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
       id,
       u.nom,
       u.prenom,
-      u.email?.trim().toLowerCase() || emailProvisoire(u.prenom, u.nom, u.role),
+      u.email?.trim().toLowerCase() || (await emailProvisoire(u.prenom, u.nom, u.role)),
       u.role,
       u.role === "etudiant" ? (u.annee_but ?? 1) : null,
       u.groupe || null,
       u.role === "etudiant" ? (u.parcours ?? "GEMA") : null,
       u.role === "etudiant" ? (u.referent_id ?? null) : null,
       u.role === "etudiant" ? "immediat" : "aucun",
-    );
+    ],
+  );
   return id;
 }
 
-export function modifierEmail(id: string, email: string) {
-  db().prepare("UPDATE utilisateurs SET email = ? WHERE id = ?").run(email.trim().toLowerCase(), id);
+export async function modifierEmail(id: string, email: string) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE utilisateurs SET email = ? WHERE id = ?", [email.trim().toLowerCase(), id]);
 }
 
-export function mettreAJourEtudiant(id: string, champs: { annee_but: number; parcours: string; referent_id?: string | null }) {
-  db().prepare("UPDATE utilisateurs SET annee_but = ?, parcours = ? WHERE id = ? AND role = 'etudiant'").run(champs.annee_but, champs.parcours, id);
-  if (champs.referent_id !== undefined) definirReferent(id, champs.referent_id);
+export async function mettreAJourEtudiant(
+  id: string,
+  champs: { annee_but: number; parcours: string; referent_id?: string | null },
+) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE utilisateurs SET annee_but = ?, parcours = ? WHERE id = ? AND role = 'etudiant'", [
+    champs.annee_but,
+    champs.parcours,
+    id,
+  ]);
+  if (champs.referent_id !== undefined) await definirReferent(id, champs.referent_id);
 }
 
 // ---------- Gestion des comptes (administrateur) ----------
 
-export function modifierCompte(
+export async function modifierCompte(
   id: string,
-  champs: { nom: string; prenom: string; email: string; role: Role; annee_but: number | null; groupe: string | null; parcours: string | null; referent_id: string | null },
+  champs: {
+    nom: string;
+    prenom: string;
+    email: string;
+    role: Role;
+    annee_but: number | null;
+    groupe: string | null;
+    parcours: string | null;
+    referent_id: string | null;
+  },
 ) {
   const etudiant = champs.role === "etudiant";
-  db()
-    .prepare(
-      `UPDATE utilisateurs SET nom = ?, prenom = ?, email = ?, role = ?, annee_but = ?, groupe = ?, parcours = ?, referent_id = ? WHERE id = ?`,
-    )
-    .run(
+  const pool = await obtenirPool();
+  await pool.query(
+    `UPDATE utilisateurs SET nom = ?, prenom = ?, email = ?, role = ?, annee_but = ?, groupe = ?, parcours = ?, referent_id = ? WHERE id = ?`,
+    [
       champs.nom,
       champs.prenom,
       champs.email.trim().toLowerCase(),
@@ -697,70 +773,83 @@ export function modifierCompte(
       etudiant ? champs.parcours : null,
       etudiant ? champs.referent_id : null,
       id,
-    );
+    ],
+  );
 }
 
 // Désactiver un enseignant libère ses étudiants (sans référent) : renvoie leur nombre.
-export function changerActivation(id: string, actif: boolean): number {
-  db().prepare("UPDATE utilisateurs SET actif = ? WHERE id = ?").run(actif ? 1 : 0, id);
+export async function changerActivation(id: string, actif: boolean): Promise<number> {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE utilisateurs SET actif = ? WHERE id = ?", [actif ? 1 : 0, id]);
   if (actif) return 0;
-  return Number(db().prepare("UPDATE utilisateurs SET referent_id = NULL WHERE referent_id = ?").run(id).changes);
+  const [resultat] = await pool.query("UPDATE utilisateurs SET referent_id = NULL WHERE referent_id = ?", [id]);
+  return (resultat as { affectedRows: number }).affectedRows;
 }
 
-export function historiqueCompte(id: string) {
-  // Autant de fois l'identifiant que de « ? » dans la requête.
-  const compte = (sql: string) => (db().prepare(sql).get(...Array(sql.split("?").length - 1).fill(id)) as { n: number }).n;
+export async function historiqueCompte(id: string) {
+  const pool = await obtenirPool();
+  const compte = async (sql: string, params: string[]) => {
+    const [lignes] = await pool.query(sql, params);
+    return (lignes as { n: number }[])[0].n;
+  };
   return {
-    argumentaires: compte("SELECT COUNT(*) AS n FROM argumentaires WHERE etudiant_id = ?"),
-    traces: compte("SELECT COUNT(*) AS n FROM traces WHERE etudiant_id = ?"),
-    evaluationsRecues: compte("SELECT COUNT(*) AS n FROM evaluations WHERE etudiant_id = ?"),
+    argumentaires: await compte("SELECT COUNT(*) AS n FROM argumentaires WHERE etudiant_id = ?", [id]),
+    traces: await compte("SELECT COUNT(*) AS n FROM traces WHERE etudiant_id = ?", [id]),
+    evaluationsRecues: await compte("SELECT COUNT(*) AS n FROM evaluations WHERE etudiant_id = ?", [id]),
     evaluationsDonnees:
-      compte("SELECT COUNT(*) AS n FROM evaluations WHERE enseignant_id = ? OR publiee_par = ?") +
-      compte("SELECT COUNT(*) AS n FROM rendez_vous WHERE enseignant_id = ?"),
-    actionsJournal: compte("SELECT COUNT(*) AS n FROM journal WHERE acteur_id = ?"),
-    etudiantsSuivis: compte("SELECT COUNT(*) AS n FROM utilisateurs WHERE referent_id = ?"),
+      (await compte("SELECT COUNT(*) AS n FROM evaluations WHERE enseignant_id = ? OR publiee_par = ?", [id, id])) +
+      (await compte("SELECT COUNT(*) AS n FROM rendez_vous WHERE enseignant_id = ?", [id])),
+    actionsJournal: await compte("SELECT COUNT(*) AS n FROM journal WHERE acteur_id = ?", [id]),
+    etudiantsSuivis: await compte("SELECT COUNT(*) AS n FROM utilisateurs WHERE referent_id = ?", [id]),
   };
 }
 
 // Suppression définitive d'un étudiant et de tout son portfolio (fichiers compris).
-export function supprimerEtudiant(id: string) {
-  const traces = db().prepare("SELECT id FROM traces WHERE etudiant_id = ?").all(id) as { id: string }[];
-  const base = db();
-  base.exec("BEGIN");
+export async function supprimerEtudiant(id: string) {
+  const pool = await obtenirPool();
+  const [lignesTraces] = await pool.query("SELECT id FROM traces WHERE etudiant_id = ?", [id]);
+  const traces = lignesTraces as { id: string }[];
+  const conn: PoolConnection = await pool.getConnection();
   try {
+    await conn.beginTransaction();
     for (const table of ["traces", "argumentaires", "evaluations", "rendez_vous", "presentations", "journal", "consultations"]) {
-      base.prepare(`DELETE FROM ${table} WHERE etudiant_id = ?`).run(id);
+      await conn.query(`DELETE FROM ${table} WHERE etudiant_id = ?`, [id]);
     }
-    base.prepare("DELETE FROM notifications WHERE destinataire_id = ?").run(id);
+    await conn.query("DELETE FROM notifications WHERE destinataire_id = ?", [id]);
     // Notifications de son référent qui pointaient vers ce portfolio.
-    base.prepare("DELETE FROM notifications WHERE lien LIKE '/portfolio/' || ? || '%'").run(id);
-    base.prepare("DELETE FROM courriels WHERE destinataire_id = ?").run(id);
-    base.prepare("DELETE FROM utilisateurs WHERE id = ? AND role = 'etudiant'").run(id);
-    base.exec("COMMIT");
+    await conn.query("DELETE FROM notifications WHERE lien LIKE CONCAT('/portfolio/', ?, '%')", [id]);
+    await conn.query("DELETE FROM courriels WHERE destinataire_id = ?", [id]);
+    await conn.query("DELETE FROM utilisateurs WHERE id = ? AND role = 'etudiant'", [id]);
+    await conn.commit();
   } catch (e) {
-    base.exec("ROLLBACK");
+    await conn.rollback();
     throw e;
+  } finally {
+    conn.release();
   }
   for (const t of traces) fs.rmSync(cheminFichier(t.id), { force: true });
 }
 
 // Un enseignant n'est supprimable que s'il n'a laissé aucune trace (évaluation, action) :
 // sinon on le désactive, pour garder l'historique des évaluations.
-export function supprimerEnseignant(id: string): boolean {
-  const h = historiqueCompte(id);
+export async function supprimerEnseignant(id: string): Promise<boolean> {
+  const h = await historiqueCompte(id);
   if (h.evaluationsDonnees || h.actionsJournal) return false;
-  const base = db();
-  base.exec("BEGIN");
+  const pool = await obtenirPool();
+  const conn = await pool.getConnection();
   try {
-    base.prepare("UPDATE utilisateurs SET referent_id = NULL WHERE referent_id = ?").run(id);
-    base.prepare("DELETE FROM consultations WHERE enseignant_id = ?").run(id);
-    base.prepare("DELETE FROM notifications WHERE destinataire_id = ?").run(id);
-    base.prepare("DELETE FROM courriels WHERE destinataire_id = ?").run(id);
-    base.prepare("DELETE FROM utilisateurs WHERE id = ? AND role <> 'etudiant'").run(id);
-    base.exec("COMMIT");
+    await conn.beginTransaction();
+    await conn.query("UPDATE utilisateurs SET referent_id = NULL WHERE referent_id = ?", [id]);
+    await conn.query("DELETE FROM consultations WHERE enseignant_id = ?", [id]);
+    await conn.query("DELETE FROM notifications WHERE destinataire_id = ?", [id]);
+    await conn.query("DELETE FROM courriels WHERE destinataire_id = ?", [id]);
+    await conn.query("DELETE FROM utilisateurs WHERE id = ? AND role <> 'etudiant'", [id]);
+    await conn.commit();
   } catch (e) {
-    base.exec("ROLLBACK");
+    await conn.rollback();
     throw e;
+  } finally {
+    conn.release();
   }
   return true;
 }
@@ -773,13 +862,15 @@ export type ChangementsGroupes = {
   groupe?: string | null;
 };
 
-export function appliquerChangementsGroupes(ids: string[], c: ChangementsGroupes) {
+export async function appliquerChangementsGroupes(ids: string[], c: ChangementsGroupes) {
   const resultat = { modifies: 0, ignores: [] as string[], details: [] as { id: string; avant: number | null; apres: number | null }[] };
-  const base = db();
-  base.exec("BEGIN");
+  const pool = await obtenirPool();
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
     for (const id of ids) {
-      const e = getUtilisateur(id);
+      const [lignes] = await conn.query("SELECT * FROM utilisateurs WHERE id = ?", [id]);
+      const e = (lignes as Utilisateur[])[0];
       if (!e || e.role !== "etudiant") continue;
       let annee = e.annee_but;
       if (c.annee === "suivante") {
@@ -789,120 +880,173 @@ export function appliquerChangementsGroupes(ids: string[], c: ChangementsGroupes
         }
         annee = (e.annee_but ?? 0) + 1;
       } else if (c.annee) annee = c.annee;
-      base
-        .prepare("UPDATE utilisateurs SET annee_but = ?, parcours = ?, referent_id = ?, groupe = ? WHERE id = ?")
-        .run(
-          annee,
-          c.parcours ?? e.parcours,
-          c.referent !== undefined ? c.referent : e.referent_id,
-          c.groupe !== undefined ? c.groupe : e.groupe,
-          id,
-        );
+      await conn.query("UPDATE utilisateurs SET annee_but = ?, parcours = ?, referent_id = ?, groupe = ? WHERE id = ?", [
+        annee,
+        c.parcours ?? e.parcours,
+        c.referent !== undefined ? c.referent : e.referent_id,
+        c.groupe !== undefined ? c.groupe : e.groupe,
+        id,
+      ]);
       resultat.modifies++;
       resultat.details.push({ id, avant: e.annee_but, apres: annee });
     }
-    base.exec("COMMIT");
+    await conn.commit();
   } catch (e) {
-    base.exec("ROLLBACK");
+    await conn.rollback();
     throw e;
+  } finally {
+    conn.release();
   }
   return resultat;
 }
 
-export function marquerConsulte(enseignantId: string, etudiantId: string) {
-  db()
-    .prepare(
-      `INSERT INTO consultations (enseignant_id, etudiant_id, vu_le) VALUES (?, ?, ?)
-       ON CONFLICT(enseignant_id, etudiant_id) DO UPDATE SET vu_le = excluded.vu_le`,
-    )
-    .run(enseignantId, etudiantId, maintenant());
+export async function marquerConsulte(enseignantId: string, etudiantId: string) {
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO consultations (enseignant_id, etudiant_id, vu_le) VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE vu_le = VALUES(vu_le)`,
+    [enseignantId, etudiantId, maintenant()],
+  );
 }
 
 // ---------- Jeu de démonstration ----------
 
 // Rendez-vous de suivi de démonstration (ajoutés une seule fois, base neuve ou existante).
 // Étudiants de test des parcours GPRH et GC2F (ajoutés une seule fois, base neuve ou existante).
-function completerDemoParcours(base: DatabaseSync) {
-  if (!base.prepare("SELECT 1 FROM utilisateurs WHERE id = 'ens-bernard'").get()) return;
-  if (!base.prepare("SELECT 1 FROM utilisateurs WHERE id = 'ens-lambert'").get()) return;
-  if (base.prepare("SELECT 1 FROM utilisateurs WHERE id = 'etu-benali'").get()) return;
-  const ilYa = (j: number) => new Date(Date.now() - j * 86400000).toISOString();
-  const insUtil = base.prepare(
-    `INSERT INTO utilisateurs (id, nom, prenom, email, role, annee_but, groupe, parcours, referent_id, pref_courriel)
-     VALUES (?, ?, ?, ?, 'etudiant', ?, ?, ?, ?, 'immediat')`,
-  );
-  const insArg = base.prepare("INSERT INTO argumentaires (etudiant_id, annee, competence, texte, maj_le) VALUES (?, ?, ?, ?, ?)");
-  const insTrace = base.prepare(
-    `INSERT INTO traces (id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const insEval = base.prepare(
-    `INSERT INTO evaluations (etudiant_id, annee, competence, niveau, note, commentaire, enseignant_id, maj_le, niveau_publie, note_publiee, commentaire_publie, publiee_le, publiee_par)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const insRdv = base.prepare(
-    `INSERT INTO rendez_vous (etudiant_id, annee, numero, date_rdv, note, commentaire, enseignant_id, maj_le, note_publiee, commentaire_publie, publie_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const insJournal = base.prepare(
-    "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  );
-  const arg = (etu: string, annee: number, comp: string, texte: string, j: number) => {
-    insArg.run(etu, annee, comp, texte, ilYa(j));
-    insJournal.run(etu, etu, annee, comp, "argumentaire_cree", `${texte.split(/\s+/).length} mots`, ilYa(j));
+async function completerDemoParcours(pool: Pool) {
+  const existe = async (sql: string) => {
+    const [lignes] = await pool.query(sql);
+    return (lignes as unknown[]).length > 0;
   };
-  const trace = (etu: string, annee: number, comp: string, titre: string, description: string, j: number) => {
+  if (!(await existe("SELECT 1 FROM utilisateurs WHERE id = 'ens-bernard'"))) return;
+  if (!(await existe("SELECT 1 FROM utilisateurs WHERE id = 'ens-lambert'"))) return;
+  if (await existe("SELECT 1 FROM utilisateurs WHERE id = 'etu-benali'")) return;
+  const ilYa = (j: number) => new Date(Date.now() - j * 86400000).toISOString();
+  const insUtil = (id: string, nom: string, prenom: string, email: string, annee: number, groupe: string, parcours: string, referent: string) =>
+    pool.query(
+      `INSERT INTO utilisateurs (id, nom, prenom, email, role, annee_but, groupe, parcours, referent_id, pref_courriel)
+       VALUES (?, ?, ?, ?, 'etudiant', ?, ?, ?, ?, 'immediat')`,
+      [id, nom, prenom, email, annee, groupe, parcours, referent],
+    );
+  const arg = async (etu: string, annee: number, comp: string, texte: string, j: number) => {
+    await pool.query("INSERT INTO argumentaires (etudiant_id, annee, competence, texte, maj_le) VALUES (?, ?, ?, ?, ?)", [
+      etu,
+      annee,
+      comp,
+      texte,
+      ilYa(j),
+    ]);
+    await pool.query(
+      "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [etu, etu, annee, comp, "argumentaire_cree", `${texte.split(/\s+/).length} mots`, ilYa(j)],
+    );
+  };
+  const trace = async (etu: string, annee: number, comp: string, titre: string, description: string, j: number) => {
     const id = randomUUID();
     const contenu = genererPdfDemo(titre, [`Trace déposée pour la compétence ${comp} (BUT${annee})`, description, "Document de démonstration généré automatiquement."]);
     fs.writeFileSync(cheminFichier(id), contenu);
     const nom = titre.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".pdf";
-    insTrace.run(id, etu, annee, comp, titre, description, nom, contenu.length, ilYa(j), ilYa(j));
-    insJournal.run(etu, etu, annee, comp, "trace_ajoutee", titre, ilYa(j));
+    await pool.query(
+      `INSERT INTO traces (id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, etu, annee, comp, titre, description, nom, contenu.length, ilYa(j), ilYa(j)],
+    );
+    await pool.query(
+      "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [etu, etu, annee, comp, "trace_ajoutee", titre, ilYa(j)],
+    );
   };
+  const insEval = (
+    etu: string,
+    annee: number,
+    comp: string,
+    niveau: string,
+    note: number,
+    commentaire: string,
+    enseignant: string,
+    maj: string,
+    niveauPublie: string | null,
+    notePubliee: number | null,
+    commentairePublie: string | null,
+    publieeLe: string | null,
+    publieePar: string | null,
+  ) =>
+    pool.query(
+      `INSERT INTO evaluations (etudiant_id, annee, competence, niveau, note, commentaire, enseignant_id, maj_le, niveau_publie, note_publiee, commentaire_publie, publiee_le, publiee_par)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [etu, annee, comp, niveau, note, commentaire, enseignant, maj, niveauPublie, notePubliee, commentairePublie, publieeLe, publieePar],
+    );
+  const insRdv = (
+    etu: string,
+    annee: number,
+    numero: number,
+    date: string,
+    note: number,
+    commentaire: string,
+    enseignant: string,
+    maj: string,
+    notePubliee: number,
+    commentairePublie: string,
+    publieLe: string,
+  ) =>
+    pool.query(
+      `INSERT INTO rendez_vous (etudiant_id, annee, numero, date_rdv, note, commentaire, enseignant_id, maj_le, note_publiee, commentaire_publie, publie_le)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [etu, annee, numero, date, note, commentaire, enseignant, maj, notePubliee, commentairePublie, publieLe],
+    );
 
   // Parcours GPRH
-  insUtil.run("etu-benali", "Benali", "Sarah", "sarah.benali@etu.exemple.fr", 2, "TD3", "GPRH", "ens-bernard");
-  arg("etu-benali", 2, "C4", "Pendant mon stage au service RH d'une clinique, j'ai préparé les éléments variables de paie (heures supplémentaires, primes de nuit) et vérifié les bulletins avant validation. J'ai compris l'importance du contrôle croisé avec les plannings.", 6);
-  trace("etu-benali", 2, "C4", "Contrôle des éléments variables de paie", "Grille de contrôle et exemple de bulletin anonymisé (stage).", 6);
-  insEval.run("etu-benali", 2, "C4", "en_cours", 12, "Bonne rigueur ; expliciter davantage le cadre juridique mobilisé.", "ens-bernard", ilYa(3), "en_cours", 12, "Bonne rigueur ; expliciter davantage le cadre juridique mobilisé.", ilYa(3), "ens-bernard");
-  insRdv.run("etu-benali", 2, 1, ilYa(20).slice(0, 10), 13, "Bon démarrage ; penser à déposer des traces en C5.", "ens-bernard", ilYa(20), 13, "Bon démarrage ; penser à déposer des traces en C5.", ilYa(20));
-  insUtil.run("etu-laurent", "Laurent", "Maxime", "maxime.laurent@etu.exemple.fr", 3, "TD2", "GPRH", "ens-lambert");
-  arg("etu-laurent", 3, "C5", "En alternance, j'ai refondu le processus d'intégration des nouveaux arrivants : livret d'accueil, parcours de formation et questionnaire de satisfaction à trois mois.", 4);
-  trace("etu-laurent", 3, "C5", "Livret d'accueil des nouveaux arrivants", "Version finale diffusée par l'entreprise d'accueil.", 4);
+  await insUtil("etu-benali", "Benali", "Sarah", "sarah.benali@etu.exemple.fr", 2, "TD3", "GPRH", "ens-bernard");
+  await arg("etu-benali", 2, "C4", "Pendant mon stage au service RH d'une clinique, j'ai préparé les éléments variables de paie (heures supplémentaires, primes de nuit) et vérifié les bulletins avant validation. J'ai compris l'importance du contrôle croisé avec les plannings.", 6);
+  await trace("etu-benali", 2, "C4", "Contrôle des éléments variables de paie", "Grille de contrôle et exemple de bulletin anonymisé (stage).", 6);
+  await insEval("etu-benali", 2, "C4", "en_cours", 12, "Bonne rigueur ; expliciter davantage le cadre juridique mobilisé.", "ens-bernard", ilYa(3), "en_cours", 12, "Bonne rigueur ; expliciter davantage le cadre juridique mobilisé.", ilYa(3), "ens-bernard");
+  await insRdv("etu-benali", 2, 1, ilYa(20).slice(0, 10), 13, "Bon démarrage ; penser à déposer des traces en C5.", "ens-bernard", ilYa(20), 13, "Bon démarrage ; penser à déposer des traces en C5.", ilYa(20));
+  await insUtil("etu-laurent", "Laurent", "Maxime", "maxime.laurent@etu.exemple.fr", 3, "TD2", "GPRH", "ens-lambert");
+  await arg("etu-laurent", 3, "C5", "En alternance, j'ai refondu le processus d'intégration des nouveaux arrivants : livret d'accueil, parcours de formation et questionnaire de satisfaction à trois mois.", 4);
+  await trace("etu-laurent", 3, "C5", "Livret d'accueil des nouveaux arrivants", "Version finale diffusée par l'entreprise d'accueil.", 4);
 
   // Parcours GC2F
-  insUtil.run("etu-perrin", "Perrin", "Julie", "julie.perrin@etu.exemple.fr", 2, "TD3", "GC2F", "ens-bernard");
-  arg("etu-perrin", 2, "C4", "Lors de la SAÉ « Révision des comptes », j'ai contrôlé le cycle achats-fournisseurs d'une PME : rapprochement des factures, lettrage et justification des soldes. J'ai identifié deux anomalies de cut-off.", 5);
-  trace("etu-perrin", 2, "C4", "Dossier de révision du cycle fournisseurs", "Feuilles de travail et note de synthèse (SAÉ).", 5);
-  insUtil.run("etu-masson", "Masson", "Antoine", "antoine.masson@etu.exemple.fr", 3, "TD2", "GC2F", "ens-lambert");
-  arg("etu-masson", 3, "C5", "J'ai construit le budget de trésorerie sur douze mois de mon entreprise d'accueil et proposé un plan de financement pour l'achat d'un nouveau véhicule utilitaire.", 2);
-  trace("etu-masson", 3, "C5", "Budget de trésorerie et plan de financement", "Tableur commenté présenté au gérant.", 2);
-  insEval.run("etu-masson", 3, "C5", "acquis", 15, "Prévisions cohérentes et bien argumentées.", "ens-lambert", ilYa(1), null, null, null, null, null);
+  await insUtil("etu-perrin", "Perrin", "Julie", "julie.perrin@etu.exemple.fr", 2, "TD3", "GC2F", "ens-bernard");
+  await arg("etu-perrin", 2, "C4", "Lors de la SAÉ « Révision des comptes », j'ai contrôlé le cycle achats-fournisseurs d'une PME : rapprochement des factures, lettrage et justification des soldes. J'ai identifié deux anomalies de cut-off.", 5);
+  await trace("etu-perrin", 2, "C4", "Dossier de révision du cycle fournisseurs", "Feuilles de travail et note de synthèse (SAÉ).", 5);
+  await insUtil("etu-masson", "Masson", "Antoine", "antoine.masson@etu.exemple.fr", 3, "TD2", "GC2F", "ens-lambert");
+  await arg("etu-masson", 3, "C5", "J'ai construit le budget de trésorerie sur douze mois de mon entreprise d'accueil et proposé un plan de financement pour l'achat d'un nouveau véhicule utilitaire.", 2);
+  await trace("etu-masson", 3, "C5", "Budget de trésorerie et plan de financement", "Tableur commenté présenté au gérant.", 2);
+  await insEval("etu-masson", 3, "C5", "acquis", 15, "Prévisions cohérentes et bien argumentées.", "ens-lambert", ilYa(1), null, null, null, null, null);
 }
 
-function completerDemoRendezVous(base: DatabaseSync) {
-  if ((base.prepare("SELECT COUNT(*) AS n FROM rendez_vous").get() as { n: number }).n > 0) return;
-  if (!base.prepare("SELECT 1 FROM utilisateurs WHERE id = 'etu-fournier'").get()) return;
-  const ins = base.prepare(
-    `INSERT INTO rendez_vous (etudiant_id, annee, numero, date_rdv, note, commentaire, enseignant_id, maj_le, note_publiee, commentaire_publie, publie_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
+async function completerDemoRendezVous(pool: Pool) {
+  const [lignesCompte] = await pool.query("SELECT COUNT(*) AS n FROM rendez_vous");
+  if ((lignesCompte as { n: number }[])[0].n > 0) return;
+  const [lignesFournier] = await pool.query("SELECT 1 FROM utilisateurs WHERE id = 'etu-fournier'");
+  if ((lignesFournier as unknown[]).length === 0) return;
   const ilYa = (j: number) => new Date(Date.now() - j * 86400000).toISOString();
   const jour = (j: number) => ilYa(j).slice(0, 10);
+  const ins = (etu: string, annee: number, numero: number, date: string, note: number, commentaire: string, enseignant: string, maj: string, notePubliee: number | null, commentairePublie: string | null, publieLe: string | null) =>
+    pool.query(
+      `INSERT INTO rendez_vous (etudiant_id, annee, numero, date_rdv, note, commentaire, enseignant_id, maj_le, note_publiee, commentaire_publie, publie_le)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [etu, annee, numero, date, note, commentaire, enseignant, maj, notePubliee, commentairePublie, publieLe],
+    );
   // Manon (BUT3) : 1er rendez-vous publié, 2e en brouillon.
-  ins.run("etu-fournier", 3, 1, jour(30), 15, "Projet entrepreneurial bien engagé ; consolider les traces de C2.", "ens-lambert", ilYa(30), 15, "Projet entrepreneurial bien engagé ; consolider les traces de C2.", ilYa(30));
-  ins.run("etu-fournier", 3, 2, jour(2), 14, "Bonne progression, argumentaire C4 à finaliser.", "ens-lambert", ilYa(2), null, null, null);
+  await ins("etu-fournier", 3, 1, jour(30), 15, "Projet entrepreneurial bien engagé ; consolider les traces de C2.", "ens-lambert", ilYa(30), 15, "Projet entrepreneurial bien engagé ; consolider les traces de C2.", ilYa(30));
+  await ins("etu-fournier", 3, 2, jour(2), 14, "Bonne progression, argumentaire C4 à finaliser.", "ens-lambert", ilYa(2), null, null, null);
   // Nathan (BUT2) : 1er rendez-vous publié.
-  ins.run("etu-garcia", 2, 1, jour(25), 12, "Démarche réflexive à approfondir dans les argumentaires.", "ens-bernard", ilYa(25), 12, "Démarche réflexive à approfondir dans les argumentaires.", ilYa(25));
+  await ins("etu-garcia", 2, 1, jour(25), 12, "Démarche réflexive à approfondir dans les argumentaires.", "ens-bernard", ilYa(25), 12, "Démarche réflexive à approfondir dans les argumentaires.", ilYa(25));
 }
 
 // Référents, troisième enseignante et évaluations publiées : ajoutés aussi aux bases créées par la première version.
-function completerDemo(base: DatabaseSync) {
-  if (!base.prepare("SELECT 1 FROM utilisateurs WHERE id = 'ens-bernard'").get()) return;
-  if (base.prepare("SELECT 1 FROM utilisateurs WHERE id = 'ens-lambert'").get()) return;
-  base
-    .prepare("INSERT INTO utilisateurs (id, nom, prenom, email, role, pref_courriel) VALUES (?, ?, ?, ?, 'enseignant', 'aucun')")
-    .run("ens-lambert", "Lambert", "Sophie", "sophie.lambert@exemple.fr");
+async function completerDemo(pool: Pool) {
+  const [lignesBernard] = await pool.query("SELECT 1 FROM utilisateurs WHERE id = 'ens-bernard'");
+  if ((lignesBernard as unknown[]).length === 0) return;
+  const [lignesLambert] = await pool.query("SELECT 1 FROM utilisateurs WHERE id = 'ens-lambert'");
+  if ((lignesLambert as unknown[]).length > 0) return;
+  await pool.query("INSERT INTO utilisateurs (id, nom, prenom, email, role, pref_courriel) VALUES (?, ?, ?, ?, 'enseignant', 'aucun')", [
+    "ens-lambert",
+    "Lambert",
+    "Sophie",
+    "sophie.lambert@exemple.fr",
+  ]);
   const referents: Record<string, string> = {
     "etu-dubois": "ens-bernard",
     "etu-moreau": "ens-bernard",
@@ -913,17 +1057,18 @@ function completerDemo(base: DatabaseSync) {
     "etu-fournier": "ens-lambert",
     "etu-girard": "ens-lambert",
   };
-  const maj = base.prepare("UPDATE utilisateurs SET referent_id = ? WHERE id = ? AND referent_id IS NULL");
-  for (const [etu, ref] of Object.entries(referents)) maj.run(ref, etu);
+  for (const [etu, ref] of Object.entries(referents)) {
+    await pool.query("UPDATE utilisateurs SET referent_id = ? WHERE id = ? AND referent_id IS NULL", [ref, etu]);
+  }
   // Les évaluations du jeu de démonstration sont déjà publiées.
-  base.exec(`UPDATE evaluations SET niveau_publie = niveau, note_publiee = note, commentaire_publie = commentaire,
+  await pool.query(`UPDATE evaluations SET niveau_publie = niveau, note_publiee = note, commentaire_publie = commentaire,
              publiee_le = maj_le, publiee_par = enseignant_id
              WHERE publiee_le IS NULL AND (
                (etudiant_id = 'etu-fournier' AND annee = 1 AND competence = 'C1') OR
                (etudiant_id = 'etu-garcia' AND annee = 2 AND competence = 'C2'))`);
 }
 
-function peuplerDemo(base: DatabaseSync) {
+async function peuplerDemo(pool: Pool) {
   const utilisateurs: Omit<Utilisateur, "referent_id" | "parcours" | "actif" | "pref_courriel">[] = [
     { id: "ens-martin", prenom: "Claire", nom: "Martin", email: "claire.martin@exemple.fr", role: "admin", annee_but: null, groupe: null },
     { id: "ens-bernard", prenom: "Thomas", nom: "Bernard", email: "thomas.bernard@exemple.fr", role: "enseignant", annee_but: null, groupe: null },
@@ -936,33 +1081,22 @@ function peuplerDemo(base: DatabaseSync) {
     { id: "etu-fournier", prenom: "Manon", nom: "Fournier", email: "manon.fournier@etu.exemple.fr", role: "etudiant", annee_but: 3, groupe: "TD1" },
     { id: "etu-girard", prenom: "Lucas", nom: "Girard", email: "lucas.girard@etu.exemple.fr", role: "etudiant", annee_but: 3, groupe: "TD1" },
   ];
-  const insUtil = base.prepare(
-    "INSERT INTO utilisateurs (id, nom, prenom, email, role, annee_but, groupe, pref_courriel) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-  );
   for (const u of utilisateurs) {
-    insUtil.run(u.id, u.nom, u.prenom, u.email, u.role, u.annee_but, u.groupe, u.role === "etudiant" ? "immediat" : "aucun");
+    await pool.query("INSERT INTO utilisateurs (id, nom, prenom, email, role, annee_but, groupe, pref_courriel) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
+      u.id,
+      u.nom,
+      u.prenom,
+      u.email,
+      u.role,
+      u.annee_but,
+      u.groupe,
+      u.role === "etudiant" ? "immediat" : "aucun",
+    ]);
   }
 
-  const ilYa = (jours: number, heures = 0) =>
-    new Date(Date.now() - jours * 86400000 - heures * 3600000).toISOString();
+  const ilYa = (jours: number, heures = 0) => new Date(Date.now() - jours * 86400000 - heures * 3600000).toISOString();
 
-  const insPres = base.prepare("INSERT INTO presentations (etudiant_id, texte, projet_pro, maj_le) VALUES (?, ?, ?, ?)");
-  const insArg = base.prepare(
-    "INSERT INTO argumentaires (etudiant_id, annee, competence, texte, maj_le) VALUES (?, ?, ?, ?, ?)",
-  );
-  const insTrace = base.prepare(
-    `INSERT INTO traces (id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const insEval = base.prepare(
-    `INSERT INTO evaluations (etudiant_id, annee, competence, niveau, note, commentaire, enseignant_id, maj_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const insJournal = base.prepare(
-    "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  );
-
-  const trace = (etu: string, annee: number, comp: string, titre: string, description: string, jours: number) => {
+  const trace = async (etu: string, annee: number, comp: string, titre: string, description: string, jours: number) => {
     const id = randomUUID();
     const contenu = genererPdfDemo(titre, [
       `Trace déposée pour la compétence ${comp} (BUT${annee})`,
@@ -971,54 +1105,97 @@ function peuplerDemo(base: DatabaseSync) {
     ]);
     fs.writeFileSync(cheminFichier(id), contenu);
     const nomFichier = titre.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".pdf";
-    insTrace.run(id, etu, annee, comp, titre, description, nomFichier, contenu.length, ilYa(jours), ilYa(jours));
-    insJournal.run(etu, etu, annee, comp, "trace_ajoutee", titre, ilYa(jours));
+    await pool.query(
+      `INSERT INTO traces (id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, etu, annee, comp, titre, description, nomFichier, contenu.length, ilYa(jours), ilYa(jours)],
+    );
+    await pool.query(
+      "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [etu, etu, annee, comp, "trace_ajoutee", titre, ilYa(jours)],
+    );
   };
 
-  const arg = (etu: string, annee: number, comp: string, texte: string, jours: number) => {
-    insArg.run(etu, annee, comp, texte, ilYa(jours));
-    insJournal.run(etu, etu, annee, comp, "argumentaire_cree", `${texte.split(/\s+/).length} mots`, ilYa(jours));
+  const arg = async (etu: string, annee: number, comp: string, texte: string, jours: number) => {
+    await pool.query("INSERT INTO argumentaires (etudiant_id, annee, competence, texte, maj_le) VALUES (?, ?, ?, ?, ?)", [
+      etu,
+      annee,
+      comp,
+      texte,
+      ilYa(jours),
+    ]);
+    await pool.query(
+      "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [etu, etu, annee, comp, "argumentaire_cree", `${texte.split(/\s+/).length} mots`, ilYa(jours)],
+    );
   };
 
   // Manon (BUT3) : a commencé son portfolio en BUT1 et l'a complété chaque année.
-  insPres.run(
+  await pool.query("INSERT INTO presentations (etudiant_id, texte, projet_pro, maj_le) VALUES (?, ?, ?, ?)", [
     "etu-fournier",
     "Étudiante en BUT GEA parcours GEMA, j'ai effectué mon alternance dans une PME de distribution de matériel agricole. Je m'intéresse particulièrement à la création d'entreprise et au pilotage de projets.",
     "Reprendre ou créer une entreprise dans le secteur agroalimentaire après une licence professionnelle ou un master entrepreneuriat.",
     ilYa(40),
+  ]);
+  await arg("etu-fournier", 1, "C1", "Lors de la SAÉ « Diagnostic d'une organisation », j'ai analysé une boulangerie artisanale de mon quartier. J'ai identifié ses enjeux économiques (concurrence des grandes surfaces) et juridiques (statut d'EURL). J'ai d'abord eu du mal à distinguer les parties prenantes internes et externes ; la cartographie réalisée en groupe m'a permis de clarifier les relations entre les acteurs du processus d'approvisionnement.", 400);
+  await trace("etu-fournier", 1, "C1", "Diagnostic de la boulangerie Martin", "Rapport de SAÉ : cartographie des parties prenantes et analyse PESTEL.", 400);
+  await pool.query(
+    `INSERT INTO evaluations (etudiant_id, annee, competence, niveau, note, commentaire, enseignant_id, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ["etu-fournier", 1, "C1", "acquis", 14, "Analyse claire et bien documentée. La cartographie des acteurs est pertinente.", "ens-martin", ilYa(380)],
   );
-  arg("etu-fournier", 1, "C1", "Lors de la SAÉ « Diagnostic d'une organisation », j'ai analysé une boulangerie artisanale de mon quartier. J'ai identifié ses enjeux économiques (concurrence des grandes surfaces) et juridiques (statut d'EURL). J'ai d'abord eu du mal à distinguer les parties prenantes internes et externes ; la cartographie réalisée en groupe m'a permis de clarifier les relations entre les acteurs du processus d'approvisionnement.", 400);
-  trace("etu-fournier", 1, "C1", "Diagnostic de la boulangerie Martin", "Rapport de SAÉ : cartographie des parties prenantes et analyse PESTEL.", 400);
-  insEval.run("etu-fournier", 1, "C1", "acquis", 14, "Analyse claire et bien documentée. La cartographie des acteurs est pertinente.", "ens-martin", ilYa(380));
-  arg("etu-fournier", 3, "C4", "Dans le cadre de mon alternance, j'ai participé à l'étude de faisabilité d'une nouvelle gamme de services de maintenance. J'ai testé la viabilité financière du business model en construisant un plan de trésorerie sur trois ans et en simulant deux scénarios de prix. La présentation au directeur financier m'a obligée à argumenter mes hypothèses.", 3);
-  trace("etu-fournier", 3, "C4", "Business plan – offre de maintenance", "Plan de financement et prévisionnel de trésorerie présentés à la direction.", 3);
-  trace("etu-fournier", 3, "C4", "Support de présentation à la direction", "Diaporama de soutenance du projet (10 diapositives).", 2);
-  arg("etu-fournier", 3, "C1", "J'ai proposé une réorganisation du processus de gestion des commandes après avoir mesuré les délais de traitement sur deux mois.", 1);
+  await arg("etu-fournier", 3, "C4", "Dans le cadre de mon alternance, j'ai participé à l'étude de faisabilité d'une nouvelle gamme de services de maintenance. J'ai testé la viabilité financière du business model en construisant un plan de trésorerie sur trois ans et en simulant deux scénarios de prix. La présentation au directeur financier m'a obligée à argumenter mes hypothèses.", 3);
+  await trace("etu-fournier", 3, "C4", "Business plan – offre de maintenance", "Plan de financement et prévisionnel de trésorerie présentés à la direction.", 3);
+  await trace("etu-fournier", 3, "C4", "Support de présentation à la direction", "Diaporama de soutenance du projet (10 diapositives).", 2);
+  await arg("etu-fournier", 3, "C1", "J'ai proposé une réorganisation du processus de gestion des commandes après avoir mesuré les délais de traitement sur deux mois.", 1);
 
   // Lucas (BUT3) : arrive en BUT3, portfolio à compléter.
-  arg("etu-girard", 3, "C2", "J'ai construit un tableau de bord sous Excel pour suivre les stocks de l'entreprise d'accueil.", 6);
+  await arg("etu-girard", 3, "C2", "J'ai construit un tableau de bord sous Excel pour suivre les stocks de l'entreprise d'accueil.", 6);
 
   // Nathan (BUT2)
-  insPres.run("etu-garcia", "Étudiant en BUT2 GEA, passionné de sport et trésorier du BDE.", "Contrôle de gestion dans le secteur du sport.", ilYa(20));
-  insJournal.run("etu-garcia", "etu-garcia", null, null, "presentation_maj", "", ilYa(20));
-  arg("etu-garcia", 2, "C2", "Au cours de la SAÉ ERP, j'ai paramétré un cycle achats-ventes sur Odoo. J'ai traité les données de ventes pour identifier les produits les moins rentables et j'ai présenté mes conclusions sous forme de graphiques.", 10);
-  trace("etu-garcia", 2, "C2", "Rapport SAÉ ERP Odoo", "Captures du paramétrage et analyse des ventes.", 10);
-  insEval.run("etu-garcia", 2, "C2", "en_cours", 10.5, "Bonne maîtrise de l'outil. L'argumentaire doit davantage expliciter les risques évalués.", "ens-bernard", ilYa(8));
-  insJournal.run("etu-garcia", "ens-bernard", 2, "C2", "evaluation", "En cours d'acquisition", ilYa(8));
-  arg("etu-garcia", 2, "C3", "En tant que trésorier du BDE, j'ai coordonné l'organisation du gala avec quatre associations.", 1);
-  trace("etu-garcia", 2, "C3", "Rétroplanning du gala", "Diagramme de Gantt partagé avec les associations.", 0.2);
+  await pool.query("INSERT INTO presentations (etudiant_id, texte, projet_pro, maj_le) VALUES (?, ?, ?, ?)", [
+    "etu-garcia",
+    "Étudiant en BUT2 GEA, passionné de sport et trésorier du BDE.",
+    "Contrôle de gestion dans le secteur du sport.",
+    ilYa(20),
+  ]);
+  await pool.query("INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+    "etu-garcia",
+    "etu-garcia",
+    null,
+    null,
+    "presentation_maj",
+    "",
+    ilYa(20),
+  ]);
+  await arg("etu-garcia", 2, "C2", "Au cours de la SAÉ ERP, j'ai paramétré un cycle achats-ventes sur Odoo. J'ai traité les données de ventes pour identifier les produits les moins rentables et j'ai présenté mes conclusions sous forme de graphiques.", 10);
+  await trace("etu-garcia", 2, "C2", "Rapport SAÉ ERP Odoo", "Captures du paramétrage et analyse des ventes.", 10);
+  await pool.query(
+    `INSERT INTO evaluations (etudiant_id, annee, competence, niveau, note, commentaire, enseignant_id, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ["etu-garcia", 2, "C2", "en_cours", 10.5, "Bonne maîtrise de l'outil. L'argumentaire doit davantage expliciter les risques évalués.", "ens-bernard", ilYa(8)],
+  );
+  await pool.query("INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+    "etu-garcia",
+    "ens-bernard",
+    2,
+    "C2",
+    "evaluation",
+    "En cours d'acquisition",
+    ilYa(8),
+  ]);
+  await arg("etu-garcia", 2, "C3", "En tant que trésorier du BDE, j'ai coordonné l'organisation du gala avec quatre associations.", 1);
+  await trace("etu-garcia", 2, "C3", "Rétroplanning du gala", "Diagramme de Gantt partagé avec les associations.", 0.2);
 
   // Chloé (BUT2) : complète aussi son historique de BUT1.
-  arg("etu-roux", 1, "C3", "En BUT1, j'ai animé l'équipe projet du Projet Personnel et Professionnel : répartition des tâches, comptes rendus de réunion.", 5);
-  trace("etu-roux", 1, "C3", "Comptes rendus de réunion PPP", "Trois comptes rendus rédigés et diffusés à l'équipe.", 5);
-  arg("etu-roux", 2, "C4", "J'ai modélisé le business model d'une start-up locale avec le Business Model Canvas.", 2);
+  await arg("etu-roux", 1, "C3", "En BUT1, j'ai animé l'équipe projet du Projet Personnel et Professionnel : répartition des tâches, comptes rendus de réunion.", 5);
+  await trace("etu-roux", 1, "C3", "Comptes rendus de réunion PPP", "Trois comptes rendus rédigés et diffusés à l'équipe.", 5);
+  await arg("etu-roux", 2, "C4", "J'ai modélisé le business model d'une start-up locale avec le Business Model Canvas.", 2);
 
   // Léa (BUT1)
-  arg("etu-dubois", 1, "C1", "J'ai étudié le fonctionnement d'une mairie pour comprendre la différence entre une organisation publique et une entreprise privée.", 4);
-  trace("etu-dubois", 1, "C1", "Fiche d'identité de la mairie", "Organigramme et missions des services.", 4);
+  await arg("etu-dubois", 1, "C1", "J'ai étudié le fonctionnement d'une mairie pour comprendre la différence entre une organisation publique et une entreprise privée.", 4);
+  await trace("etu-dubois", 1, "C1", "Fiche d'identité de la mairie", "Organigramme et missions des services.", 4);
 
   // Le jeu de démonstration considère que Thomas Bernard a consulté Nathan il y a 3 jours.
-  base
-    .prepare("INSERT INTO consultations (enseignant_id, etudiant_id, vu_le) VALUES (?, ?, ?)")
-    .run("ens-bernard", "etu-garcia", ilYa(3));
+  await pool.query("INSERT INTO consultations (enseignant_id, etudiant_id, vu_le) VALUES (?, ?, ?)", ["ens-bernard", "etu-garcia", ilYa(3)]);
 }

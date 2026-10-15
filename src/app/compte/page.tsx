@@ -8,8 +8,8 @@ export default async function MonCompte() {
   const u = await utilisateurCourant();
   if (!u) redirect("/connexion");
   const enseignant = estEnseignant(u);
-  const referent = u.referent_id ? getUtilisateur(u.referent_id) : undefined;
-  const nbSuivis = enseignant ? listerEtudiants({ referentId: u.id }).length : 0;
+  const referent = u.referent_id ? await getUtilisateur(u.referent_id) : undefined;
+  const nbSuivis = enseignant ? (await listerEtudiants({ referentId: u.id })).length : 0;
   const emailProvisoire = u.email.endsWith(".a-renseigner");
 
   return (

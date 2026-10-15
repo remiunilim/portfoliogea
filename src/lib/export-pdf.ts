@@ -159,12 +159,12 @@ export async function genererPortfolioPdf(etudiant: Utilisateur): Promise<Uint8A
   const sommaire: { titre: string; niveau: 0 | 1; page: PDFPage }[] = [];
 
   const anneeMax = (etudiant.annee_but ?? 1) as AnneeBUT;
-  const referent = etudiant.referent_id ? getUtilisateur(etudiant.referent_id) : undefined;
-  const presentation = getPresentation(etudiant.id);
-  const argumentaires = getArgumentaires(etudiant.id);
-  const traces = getTraces(etudiant.id);
-  const evaluations = getEvaluations(etudiant.id);
-  const rendezVous = getRendezVous(etudiant.id);
+  const referent = etudiant.referent_id ? await getUtilisateur(etudiant.referent_id) : undefined;
+  const presentation = await getPresentation(etudiant.id);
+  const argumentaires = await getArgumentaires(etudiant.id);
+  const traces = await getTraces(etudiant.id);
+  const evaluations = await getEvaluations(etudiant.id);
+  const rendezVous = await getRendezVous(etudiant.id);
   const rdvPublie = (annee: number, numero: number) => {
     const rv = rendezVous.find((x) => x.annee === annee && x.numero === numero);
     return rv?.publie_le ? rv.note_publiee : null;

@@ -395,9 +395,9 @@ export function SyntheseNotes({ donnees, annee, publie }: { donnees: DonneesPort
   );
 }
 
-export function VueSuivi({ donnees, utilisateur, annee }: { donnees: DonneesPortfolio; utilisateur: Utilisateur; annee: AnneeBUT }) {
+export async function VueSuivi({ donnees, utilisateur, annee }: { donnees: DonneesPortfolio; utilisateur: Utilisateur; annee: AnneeBUT }) {
   const { etudiant } = donnees;
-  const enseignant = suitEtudiant(utilisateur, etudiant.id);
+  const enseignant = await suitEtudiant(utilisateur, etudiant.id);
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2">
@@ -474,7 +474,7 @@ function notesEnAttente(donnees: DonneesPortfolio, annee: number) {
 
 // ---------- Portfolio complet ----------
 
-export function VueComplete({
+export async function VueComplete({
   donnees,
   utilisateur,
   anneeMax,
@@ -485,7 +485,7 @@ export function VueComplete({
 }) {
   const { etudiant, presentation } = donnees;
   const annees = ([1, 2, 3] as AnneeBUT[]).filter((a) => a <= anneeMax);
-  const enseignant = suitEtudiant(utilisateur, etudiant.id);
+  const enseignant = await suitEtudiant(utilisateur, etudiant.id);
   return (
     <div className="space-y-6">
       <div className="no-print flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">

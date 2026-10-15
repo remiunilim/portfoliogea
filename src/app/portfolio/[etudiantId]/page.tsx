@@ -23,11 +23,11 @@ export default async function PagePortfolio(props: PageProps<"/portfolio/[etudia
   const recherche = await props.searchParams;
   const u = await utilisateurCourant();
   if (!u) redirect("/connexion");
-  const etudiant = getUtilisateur(etudiantId);
+  const etudiant = await getUtilisateur(etudiantId);
   if (!etudiant || etudiant.role !== "etudiant") notFound();
-  if (!peutConsulter(u, etudiantId)) redirect("/");
+  if (!(await peutConsulter(u, etudiantId))) redirect("/");
 
-  const referent = etudiant.referent_id ? getUtilisateur(etudiant.referent_id) : undefined;
+  const referent = etudiant.referent_id ? await getUtilisateur(etudiant.referent_id) : undefined;
   const anneeMax = (etudiant.annee_but ?? 1) as AnneeBUT;
   const anneeDemandee = Number(recherche.annee);
   const annee: AnneeBUT = estAnneeBUT(anneeDemandee) && anneeDemandee <= anneeMax ? anneeDemandee : anneeMax;
@@ -37,16 +37,16 @@ export default async function PagePortfolio(props: PageProps<"/portfolio/[etudia
   const competenceActive = competences.find((c) => c.code === onglet);
 
   const enseignant = estEnseignant(u);
-  const derniereVisite = enseignant ? getDerniereConsultation(u.id, etudiantId) : null;
+  const derniereVisite = enseignant ? await getDerniereConsultation(u.id, etudiantId) : null;
   const donnees: DonneesPortfolio = {
     etudiant,
-    presentation: getPresentation(etudiantId),
-    argumentaires: getArgumentaires(etudiantId),
-    traces: getTraces(etudiantId),
-    evaluations: getEvaluations(etudiantId),
-    rendezVous: getRendezVous(etudiantId),
-    journal: enseignant ? getJournal({ etudiantId, limite: 200 }) : [],
-    modifsEtudiant: getDernieresModifsEtudiant(etudiantId),
+    presentation: await getPresentation(etudiantId),
+    argumentaires: await getArgumentaires(etudiantId),
+    traces: await getTraces(etudiantId),
+    evaluations: await getEvaluations(etudiantId),
+    rendezVous: await getRendezVous(etudiantId),
+    journal: enseignant ? await getJournal({ etudiantId, limite: 200 }) : [],
+    modifsEtudiant: await getDernieresModifsEtudiant(etudiantId),
     derniereVisite,
   };
 

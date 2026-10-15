@@ -4,14 +4,19 @@ Plateforme de dépôt, de suivi et d'évaluation des portfolios des étudiants d
 
 ## Lancer en local
 
+Il faut **Node.js 22.5** ou une version plus récente, et une **base MariaDB** accessible (locale ou distante).
+
+1. Copier `.env.example` en `.env.local` et renseigner les identifiants de connexion à MariaDB (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`). La base elle-même est créée automatiquement au premier démarrage si elle n'existe pas encore — il suffit que l'utilisateur indiqué ait le droit de la créer (ou qu'elle existe déjà et que l'utilisateur y ait tous les droits).
+2. Installer les dépendances et lancer le serveur :
+
 ```bash
 npm install
 npm run dev
 ```
 
-Ouvrir ensuite http://localhost:3000. Il faut Node.js 22.5 ou une version plus récente, car l'application utilise le module SQLite intégré à Node.
+Ouvrir ensuite http://localhost:3000.
 
-Au premier lancement, l'application crée le dossier `data/`, qui contient la base `portfolio.db` et les PDF déposés dans `fichiers/`. Elle le remplit avec un jeu de démonstration de 3 enseignants (dont une administratrice) et 12 étudiants répartis en BUT1, BUT2 et BUT3, dont 2 en GPRH (Sarah Benali, Maxime Laurent) et 2 en GC2F (Julie Perrin, Antoine Masson). Pour repartir de zéro, il suffit de supprimer le dossier `data/`. Une base créée par une version précédente est mise à jour automatiquement au démarrage.
+Au premier démarrage, l'application crée les tables puis les remplit avec un jeu de démonstration de 3 enseignants (dont une administratrice) et 12 étudiants répartis en BUT1, BUT2 et BUT3, dont 2 en GPRH (Sarah Benali, Maxime Laurent) et 2 en GC2F (Julie Perrin, Antoine Masson). Les PDF déposés restent stockés localement dans le dossier `data/fichiers/`. Pour repartir de zéro, vider la base (`DROP DATABASE` puis relancer) et supprimer le dossier `data/`.
 
 ## Fonctionnalités
 
@@ -41,7 +46,7 @@ Au premier lancement, l'application crée le dossier `data/`, qui contient la ba
 | Fichier | Rôle |
 | --- | --- |
 | `src/lib/referentiel.ts` | Compétences, niveaux et apprentissages critiques des parcours GEMA, GPRH et GC2F, pondération des notes (source unique, à mettre à jour avec le nouveau programme national) |
-| `src/lib/db.ts` | Schéma SQLite, migrations, requêtes et jeu de démonstration |
+| `src/lib/db.ts` | Schéma MariaDB, requêtes (toutes asynchrones) et jeu de démonstration |
 | `src/lib/session.ts` | Connexion simulée (cookie) et règles d'accès (étudiant, référent, administrateur) |
 | `src/lib/export-pdf.ts` | Assemblage du portfolio en un seul PDF (pdf-lib) |
 | `src/lib/import-etudiants.ts` | Lecture, contrôle et application de l'import des listes d'étudiants (ExcelJS), modèle Excel |
@@ -58,31 +63,28 @@ Au premier lancement, l'application crée le dossier `data/`, qui contient la ba
 | `maquette/folio-gea-maquette.html` | Maquette autonome à partager (un seul fichier, données dans le navigateur) |
 | `maquette/source/` | Source de la maquette publiée sur Claude, ses tests (`node maquette/source/test-maquette.cjs`) et le script qui produit la version autonome (`node maquette/source/autonome.cjs maquette/source/folio-gea.html maquette/folio-gea-maquette.html`) |
 
-## Reprise sur un poste Linux (octobre 2026)
+## Déploiement chez la DSI
 
-**Recommandations de la DSI** : développer sous Linux pour dupliquer le projet tel quel sur leur serveur ; connexion par **SSO OpenID Connect** (identifiants de l'université) ; pile **Apache + MariaDB**.
+**Réponse de la DSI (15/10/2026)** : Node.js 22 peut être hébergé derrière Apache (en relais) avec MariaDB. La **voie A est confirmée** : l'application reste en Next.js (Node.js), pas de réécriture en PHP.
 
-**Décision encore ouverte** : l'application est en Next.js (Node.js), pas en PHP. Deux voies :
+- **Base de données** : MariaDB à la place de SQLite — fait (`src/lib/db.ts`, pilote `mysql2`). Réglages de connexion dans `.env.local` (voir `.env.example`).
+- **Hébergement** : Apache en relais (reverse proxy) devant Node.js géré par un service systemd. Modèles prêts à adapter dans `deploy/` :
+  - `deploy/apache-folio-gea.conf` : site Apache (reverse proxy + HTTPS)
+  - `deploy/folio-gea.service` : service systemd (lance `next start`)
+- **Connexion SSO OpenID Connect** : reste à faire (remplacera `src/lib/session.ts` et `src/app/connexion`). À obtenir de la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, l'adresse de retour à déclarer, les informations transmises (identifiant, email, nom, prénom, statut étudiant ou personnel).
 
-- **A. Garder Node.js** (recommandé si la DSI accepte Node.js 22 sur le serveur) : passer la base de SQLite à MariaDB (`src/lib/db.ts`), remplacer la connexion simulée par OpenID Connect (`src/lib/session.ts`, `src/app/connexion`), Apache en relais (reverse proxy) devant Node.js géré par un service systemd.
-- **B. Réécrire en PHP** (Symfony) pour la pile Apache + MariaDB + PHP standard de la DSI.
-
-Question à poser à la DSI : « Pouvez-vous héberger une application Node.js 22 derrière Apache (en relais), avec MariaDB ? » À obtenir pour OpenID : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, l'adresse de retour à déclarer, les informations transmises (identifiant, email, nom, prénom, statut étudiant ou personnel).
-
-**Transférer le projet** : copier le dossier sans `node_modules/`, `.next/` ni `data/` (base et PDF de démonstration, recréés au premier lancement). Les dossiers `desktop-widget/`, `service-widget/` et `rive/` sont d'autres projets, sans lien avec Folio GEA. Idéalement, versionner le projet dans un dépôt Git (par exemple le GitLab de l'université).
-
-**Sur le poste Linux (Ubuntu)** :
+**Sur le serveur Linux (Ubuntu)** :
 
 ```bash
 sudo apt install nodejs npm apache2 mariadb-server   # ou Node.js 22 via NodeSource si la version d'Ubuntu est plus ancienne
 node -v                                              # 22.5 minimum
 npm install
-npm run dev                                          # http://localhost:3000
+npm run build && npm run start                       # ou via le service systemd (deploy/folio-gea.service)
 ```
 
 ## Reporté aux étapes suivantes
 
 - Connexion par SSO OpenID Connect de l'université (elle remplacera `src/lib/session.ts`)
-- Base MariaDB à la place de SQLite, configuration Apache, service systemd, sauvegardes
+- Configuration Apache et systemd en production (modèles dans `deploy/`), sauvegardes de la base MariaDB
 - Envoi effectif des courriels de la file d'attente (SMTP de l'université), y compris le récapitulatif quotidien
 - Nouvelles versions du référentiel (nouveau programme national) et référentiel CG2P

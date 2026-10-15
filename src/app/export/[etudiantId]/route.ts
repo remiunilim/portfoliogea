@@ -6,9 +6,9 @@ import { peutConsulter, utilisateurCourant } from "@/lib/session";
 // ?apercu ouvre le PDF dans le navigateur au lieu de le télécharger.
 export async function GET(requete: Request, ctx: RouteContext<"/export/[etudiantId]">) {
   const { etudiantId } = await ctx.params;
-  const etudiant = getUtilisateur(etudiantId);
+  const etudiant = await getUtilisateur(etudiantId);
   if (!etudiant || etudiant.role !== "etudiant") return new Response("Introuvable", { status: 404 });
-  if (!peutConsulter(await utilisateurCourant(), etudiantId)) return new Response("Accès refusé", { status: 403 });
+  if (!(await peutConsulter(await utilisateurCourant(), etudiantId))) return new Response("Accès refusé", { status: 403 });
 
   const pdf = await genererPortfolioPdf(etudiant);
   const nomFichier = `portfolio-${etudiant.nom}-${etudiant.prenom}`

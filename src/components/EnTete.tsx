@@ -8,7 +8,7 @@ import { compterNotificationsNonLues, type Utilisateur } from "@/lib/db";
 const LIBELLE_ROLE = { etudiant: "Étudiant·e", enseignant: "Enseignant·e", admin: "Enseignant·e administrateur" };
 
 export async function EnTete({ utilisateur }: { utilisateur: Utilisateur }) {
-  const nonLues = compterNotificationsNonLues(utilisateur.id);
+  const nonLues = await compterNotificationsNonLues(utilisateur.id);
   const theme = lireTheme((await cookies()).get(COOKIE_THEME)?.value);
   const accueil = utilisateur.role === "etudiant" ? `/portfolio/${utilisateur.id}` : "/enseignant";
   return (

@@ -12,10 +12,10 @@ export default async function FicheCompte(props: PageProps<"/admin/comptes/[id]"
   if (!u) redirect("/connexion");
   if (!estAdmin(u)) redirect("/");
   const { id } = await props.params;
-  const compte = getUtilisateur(id);
+  const compte = await getUtilisateur(id);
   if (!compte) notFound();
   const etudiant = compte.role === "etudiant";
-  const h = historiqueCompte(compte.id);
+  const h = await historiqueCompte(compte.id);
   const resume = etudiant
     ? `${h.argumentaires} argumentaire(s), ${h.traces} trace(s), ${h.evaluationsRecues} évaluation(s)`
     : `${h.evaluationsDonnees} évaluation(s), ${h.actionsJournal} action(s), ${h.etudiantsSuivis} étudiant(s) suivi(s)`;
@@ -50,9 +50,8 @@ export default async function FicheCompte(props: PageProps<"/admin/comptes/[id]"
         <section className="mb-6 rounded-xl border border-line bg-surface p-5">
           <h2 className="mb-3 text-base font-semibold">Informations</h2>
           <FormModifierCompte
-            // node:sqlite renvoie des objets sans prototype : on en passe une copie simple au composant client.
             compte={{ ...compte }}
-            enseignants={listerEnseignants().map((e) => ({ id: e.id, nom: `${e.prenom} ${e.nom}` }))}
+            enseignants={(await listerEnseignants()).map((e) => ({ id: e.id, nom: `${e.prenom} ${e.nom}` }))}
             parcours={PARCOURS_GEA}
           />
         </section>
