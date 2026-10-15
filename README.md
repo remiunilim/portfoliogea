@@ -70,9 +70,10 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 **Réponse de la DSI (15/10/2026)** : Node.js 22 peut être hébergé derrière Apache (en relais) avec MariaDB. La **voie A est confirmée** : l'application reste en Next.js (Node.js), pas de réécriture en PHP.
 
 - **Base de données** : MariaDB à la place de SQLite — fait (`src/lib/db.ts`, pilote `mysql2`). Réglages de connexion dans `.env.local` (voir `.env.example`).
-- **Hébergement** : Apache en relais (reverse proxy) devant Node.js géré par un service systemd. Modèles prêts à adapter dans `deploy/` :
+- **Hébergement** : Apache en relais (reverse proxy) devant Node.js géré par un service systemd. Modèles prêts à adapter dans `deploy/`, **vérifiés en conditions réelles** (Ubuntu, Apache, MariaDB et systemd dans un environnement Linux de test — build de production, service `folio-gea` démarré par systemd, relais Apache fonctionnel de bout en bout) :
   - `deploy/apache-folio-gea.conf` : site Apache (reverse proxy + HTTPS)
-  - `deploy/folio-gea.service` : service systemd (lance `next start`)
+  - `deploy/folio-gea.service` : service systemd (lance `next start`) — bien suivre l'ordre des commandes dans ses commentaires : le dossier `data/` doit exister (avec les bons droits) **avant** le premier démarrage, sinon le service échoue (erreur systemd 226/NAMESPACE)
+  - `deploy/folio-gea-courriels.service`/`.timer` et `deploy/folio-gea-courriels-quotidien.service`/`.timer` : vidage périodique de la file de courriels
 - **Connexion SSO OpenID Connect** : faite (`src/lib/oidc.ts`, routes `src/app/connexion/oidc`), mais **pas encore testée avec le vrai fournisseur de la DSI** — en attente de ses réglages. Tant que `OIDC_ISSUER` (et les autres variables `OIDC_*` de `.env.example`) ne sont pas renseignées, `/connexion` reste en mode démonstration (choix d'un compte fictif) ; dès qu'elles le sont, elle affiche un seul bouton « Se connecter avec le compte de l'université ». Au premier vrai login, le compte est reconnu par son **email** (celui déjà enregistré via l'import Excel ou l'ajout manuel) puis l'identifiant OpenID Connect y est lié pour les connexions suivantes. **Aucun compte n'est créé automatiquement** : un compte universitaire inconnu de Folio GEA affiche un message invitant à contacter l'administrateur (l'étudiant·e ou l'enseignant·e doit déjà avoir été importé·e ou ajouté·e). À demander à la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, et l'URL de retour à déclarer chez eux (`OIDC_REDIRECT_URI`, doit correspondre exactement à ce qui est configuré côté DSI).
 
 **Sur le serveur Linux (Ubuntu)** :
@@ -87,7 +88,7 @@ npm run build && npm run start                       # ou via le service systemd
 ## Reporté aux étapes suivantes
 
 - Essai de la connexion SSO OpenID Connect avec le vrai fournisseur de la DSI, une fois ses réglages reçus
-- Configuration Apache et systemd en production (modèles dans `deploy/`), sauvegardes de la base MariaDB
+- Déploiement sur le vrai serveur de la DSI (modèles `deploy/` vérifiés en conditions réelles sur un Linux de test, mais pas encore sur ce serveur) : nom de domaine, certificat HTTPS, sauvegardes de la base MariaDB
 - Renseigner les réglages SMTP de l'université (`.env.example`) puis activer l'envoi des courriels (page *Étudiants et affectations*) quand le moment sera venu
 - Nouvelles versions du référentiel, le jour où le nouveau programme national sera publié
 - Activer CG2P (page *Étudiants et affectations* → section « Parcours CG2P ») quand l'IUT ouvrira ce parcours
