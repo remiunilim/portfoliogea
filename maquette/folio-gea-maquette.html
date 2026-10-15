@@ -1,0 +1,1419 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; } [hidden] { display: none !important; }</style>
+<title>Folio GEA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout : barre d'application + espace de travail (onglets par compétence, panneau latéral référentiel/évaluation) */
+:root {
+  --bg: #f3f6f8;
+  --surface: #ffffff;
+  --sunk: #eef2f5;
+  --fg: #16212a;
+  --muted: #5a6975;
+  --line: #dbe2e7;
+  --accent: #1f5f8b;
+  --accent-fg: #ffffff;
+  --accent-soft: #e3eef6;
+  --c1: #0b7fb5; --c1-soft: #e4f3fa;
+  --c2: #c47d07; --c2-soft: #fbf2e0;
+  --c3: #138a5e; --c3-soft: #e2f4ec;
+  --c4: #6c4bc4; --c4-soft: #efeafb;
+  --c5: #c23d63; --c5-soft: #fbe8ee;
+  --ok: #157a4f; --ok-soft: #e1f3ea;
+  --warn: #9a6200; --warn-soft: #fcf1dc;
+  --bad: #b3261e; --bad-soft: #fbe6e4;
+  --info: #155f8f; --info-soft: #e1eef8;
+  --new: #d0284f;
+  --font-ui: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11181e; --surface: #18222a; --sunk: #141d24; --fg: #e4ebf0; --muted: #96a6b2; --line: #2a3742;
+    --accent: #6fb2e0; --accent-fg: #0d1a24; --accent-soft: #1b3346;
+    --c1: #5cc0ec; --c1-soft: #16303d; --c2: #f0b54a; --c2-soft: #3a2d14; --c3: #4fcf98; --c3-soft: #15352a;
+    --c4: #a98ff0; --c4-soft: #2a2343; --c5: #f07a9b; --c5-soft: #3d1e28;
+    --ok: #5fd39c; --ok-soft: #173a2a; --warn: #f2bd5a; --warn-soft: #3b2e12; --bad: #f2867d; --bad-soft: #3d1c19;
+    --info: #79b9e8; --info-soft: #18324a; --new: #ff6b8b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11181e; --surface: #18222a; --sunk: #141d24; --fg: #e4ebf0; --muted: #96a6b2; --line: #2a3742;
+  --accent: #6fb2e0; --accent-fg: #0d1a24; --accent-soft: #1b3346;
+  --c1: #5cc0ec; --c1-soft: #16303d; --c2: #f0b54a; --c2-soft: #3a2d14; --c3: #4fcf98; --c3-soft: #15352a;
+  --c4: #a98ff0; --c4-soft: #2a2343; --c5: #f07a9b; --c5-soft: #3d1e28;
+  --ok: #5fd39c; --ok-soft: #173a2a; --warn: #f2bd5a; --warn-soft: #3b2e12; --bad: #f2867d; --bad-soft: #3d1c19;
+  --info: #79b9e8; --info-soft: #18324a; --new: #ff6b8b;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 15px; line-height: 1.5; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.25; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; }
+
+.appbar { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+.appbar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding-block: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font-weight: 700; font-size: 13px; letter-spacing: .02em; }
+.brand strong { display: block; font-size: 15px; }
+.brand span { display: block; font-size: 12px; color: var(--muted); }
+.account { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.account select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); max-width: 260px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 12px; font-size: 14px; }
+.btn:hover { background: var(--sunk); }
+.btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 500; }
+.btn-primary:hover { background: var(--accent); filter: brightness(1.08); }
+.btn-primary:disabled { opacity: .55; cursor: default; filter: none; }
+.btn-link { border: 0; background: none; padding: 0; color: var(--accent); font-size: 13px; }
+.btn-link:hover { text-decoration: underline; }
+.btn-danger { color: var(--bad); }
+
+.demo-note { background: var(--warn-soft); color: var(--warn); font-size: 13px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+main { padding-block: 22px 48px; }
+.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+.page-head h1 { font-size: 26px; font-weight: 600; }
+.sub { color: var(--muted); font-size: 14px; }
+.back { display: inline-block; margin-bottom: 8px; }
+
+.seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; }
+.seg button:hover:not(:disabled) { background: var(--accent-soft); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.seg button:disabled { color: var(--muted); opacity: .5; cursor: not-allowed; }
+.seg small { font-weight: 400; opacity: .8; font-size: 11px; }
+
+/* Les onglets passent à la ligne plutôt que de défiler : pas de barre de défilement. */
+.tabs { display: flex; flex-wrap: wrap; column-gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+.tab { border: 0; background: none; padding: 10px 10px; border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tab:hover { color: var(--fg); }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.state { font-size: 12px; }
+.tag-new { background: var(--new); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; }
+
+.grid-main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; align-items: start; }
+@media (max-width: 900px) { .grid-main { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: grid; gap: 18px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-width: 0; }
+.card h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.card h2 small { font-weight: 400; font-size: 12px; color: var(--muted); }
+.comp-head { border-radius: 12px; padding: 18px; border: 1px solid var(--line); }
+.eyebrow { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; }
+.comp-head h2 { font-size: 21px; font-weight: 600; margin: 4px 0 4px; }
+
+label.field { display: grid; gap: 4px; font-size: 14px; font-weight: 500; }
+.input, textarea.input { width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; background: var(--surface); font-weight: 400; font-size: 14px; }
+textarea.input { line-height: 1.6; resize: vertical; }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.form { display: grid; gap: 12px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .two { grid-template-columns: 1fr; } }
+.count { font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+.msg-ok { color: var(--ok); font-size: 13px; }
+.msg-err { color: var(--bad); font-size: 13px; }
+.msg-warn { color: var(--warn); font-size: 12px; }
+.drop { border: 1.5px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px; }
+.empty { color: var(--muted); font-size: 14px; }
+.prose { white-space: pre-wrap; font-size: 14.5px; line-height: 1.65; margin: 0; }
+
+.trace { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
+.trace-top { display: flex; gap: 12px; align-items: flex-start; }
+.pdf { width: 36px; height: 42px; flex: none; border-radius: 4px; background: var(--bad-soft); color: var(--bad); font: 600 10px var(--font-data); display: grid; place-items: center; }
+.trace-title { font-weight: 600; }
+.meta { font-family: var(--font-data); font-size: 11.5px; color: var(--muted); }
+ul.plain { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+ul.ac { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+details summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+
+.pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.ev-non_evalue { background: var(--sunk); color: var(--muted); border-color: var(--line); }
+.ev-insuffisant { background: var(--bad-soft); color: var(--bad); }
+.ev-en_cours { background: var(--warn-soft); color: var(--warn); }
+.ev-acquis { background: var(--ok-soft); color: var(--ok); }
+.ev-depasse { background: var(--info-soft); color: var(--info); }
+.radios { display: grid; gap: 6px; font-size: 14px; }
+.radios label { display: flex; gap: 8px; align-items: center; }
+.radios input { accent-color: var(--accent); }
+.notice { border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.notice.info { background: var(--info-soft); color: var(--info); }
+.notice.warn { background: var(--warn-soft); color: var(--warn); }
+.guide ol { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; }
+.guide span { display: block; color: var(--muted); }
+
+.feed { list-style: none; padding: 0; margin: 0; display: grid; gap: 11px; font-size: 13.5px; }
+.feed li { display: flex; gap: 10px; }
+.feed .dot { margin-top: 7px; }
+.feed .when { font-size: 12px; color: var(--muted); }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.kpi b { display: block; font: 600 24px var(--font-data); font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 12.5px; color: var(--muted); }
+.bell { position: relative; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; color: var(--fg); }
+.bell:hover { background: var(--accent-soft); }
+.bell-count { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--new); color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+.notif-list { list-style: none; margin: 0; padding: 0; overflow: hidden; }
+.notif-list li + li { border-top: 1px solid var(--line); }
+.notif { width: 100%; display: flex; gap: 12px; align-items: flex-start; text-align: left; border: 0; background: none; padding: 12px 16px; font-size: 14px; }
+.notif:hover { background: var(--accent-soft); }
+.notif.unread { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
+.notif .dot { margin-top: 7px; }
+.notif .when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.choix { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; font-size: 14px; }
+.choix:hover, .choix:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.choix input { margin-top: 3px; accent-color: var(--accent); }
+.kpis-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 900px) { .kpis-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi.warn { background: var(--warn-soft); border-color: transparent; }
+.kpi.warn b { color: var(--warn); }
+.seg-chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+.seg-chip:hover { background: var(--accent-soft); }
+.seg-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+table.assign { width: 100%; min-width: 460px; border-collapse: collapse; font-size: 14px; }
+table.assign td { padding: 10px 16px; border-top: 1px solid var(--line); }
+table.assign select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.kpi.alert { background: var(--bad-soft); border-color: transparent; }
+.kpi.alert b { color: var(--new); }
+.table-wrap { overflow-x: auto; }
+table.promo { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 14px; }
+table.promo th { text-align: center; font-weight: 600; padding: 12px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 13px; }
+table.promo th:first-child, table.promo td:first-child { text-align: left; padding-left: 16px; }
+table.promo td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.promo tr:last-child td { border-bottom: 0; }
+.cell { position: relative; width: 100%; max-width: 150px; min-height: 60px; margin: 0 auto; display: grid; place-items: center; gap: 3px; border-radius: 9px; border: 1px dashed var(--line); background: none; padding: 6px; font-size: 12px; color: var(--muted); }
+.cell:hover { box-shadow: 0 0 0 2px var(--accent-soft); }
+.cell.partiel { border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); background: var(--warn-soft); }
+.cell.complet { border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent); background: var(--ok-soft); }
+/* Dans les cellules étroites, le niveau et la note peuvent passer à la ligne au lieu de déborder. */
+.cell .pill { white-space: normal; text-align: center; line-height: 1.3; max-width: 100%; overflow-wrap: anywhere; }
+.cell > span { max-width: 100%; }
+.theme-btn { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--fg); display: grid; place-items: center; }
+.theme-btn:hover { background: var(--accent-soft); }
+.cell .new { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--new); }
+.cell .flag { font-size: 10.5px; font-weight: 600; color: var(--warn); }
+.name-btn { border: 0; background: none; padding: 0; font-weight: 600; text-align: left; }
+.name-btn:hover { color: var(--accent); text-decoration: underline; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); }
+
+.full-year { display: grid; gap: 14px; }
+.full-year > h2 { font-size: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.full-item header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.full-item h3 { font-size: 16px; }
+.comment { background: var(--sunk); border-radius: 8px; padding: 10px 12px; font-size: 14px; margin-top: 10px; }
+@media (prefers-reduced-motion: no-preference) { .card, .comp-head { transition: border-color .15s; } }
+</style>
+
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// ---------- Référentiel BUT GEA – parcours GEMA (2022) ----------
+const COMPETENCES = [
+  { code: "C1", court: "Analyser", intitule: "Analyser les processus de l'organisation dans son environnement", tronc: true,
+    niveaux: { 1: ["Identifier les processus de l'organisation", ["Identifier les différents types d'enjeux", "Qualifier les différents types d'organisations", "Identifier les relations des acteurs au sein d'un processus"]],
+               2: ["Évaluer les processus de l'organisation", ["Analyser les différents types d'enjeux", "Analyser les dimensions identitaires (juridiques, managériales…) de l'organisation", "Évaluer le niveau de performance des processus"]],
+               3: ["Conseiller pour l'amélioration des processus de l'organisation", ["Intégrer l'impact des enjeux sur l'organisation", "Conseiller un type d'organisation", "Proposer des améliorations des processus"]] } },
+  { code: "C2", court: "Décider", intitule: "Aider à la prise de décision", tronc: true,
+    niveaux: { 1: ["Identifier les éléments d'aide à la prise de décision", ["Identifier les composantes du système d'information de gestion", "Rechercher, collecter et traiter les données brutes afin de produire et de diffuser une information structurée", "Identifier les contraintes qui s'imposent à l'organisation", "Identifier les risques"]],
+               2: ["Évaluer les éléments d'aide à la prise de décision", ["Analyser les enjeux du système d'information et leur impact sur le fonctionnement de l'organisation", "Exploiter un ERP/PGI et ses fonctionnalités de base", "Traiter les données pertinentes pour répondre à une problématique", "Analyser les contraintes et leur impact sur la performance de l'organisation", "Évaluer les risques"]],
+               3: ["Concourir à la prise de décision", ["Collaborer au processus d'amélioration continue du système d'information", "Exploiter les données pour accompagner la prise de décision", "Participer à la prise de décision en fonction des contraintes identifiées", "Élaborer des mesures préventives de minimisation des risques"]] } },
+  { code: "C3", court: "Piloter", intitule: "Piloter les relations avec les parties prenantes de l'organisation", tronc: true,
+    niveaux: { 1: ["Identifier les relations entre les parties prenantes", ["Identifier ses qualités individuelles", "Identifier les relations inter-personnelles et collectives", "Travailler en équipe avec méthodes", "Utiliser de façon pertinente les techniques de communication"]],
+               2: ["Coordonner les relations entre les parties prenantes", ["Mobiliser ses qualités individuelles au service de l'intelligence collective", "Analyser les relations inter-personnelles et collectives dans la stratégie de l'organisation", "Utiliser les outils d'organisation et méthodes dédiés au travail collaboratif", "Combiner les méthodes de communication en lien avec la stratégie"]],
+               3: ["Améliorer les relations entre les parties prenantes", ["Animer une équipe", "Mener un projet collaboratif", "Participer à l'amélioration de la politique de communication en lien avec la stratégie"]] } },
+  { code: "C4", court: "Entreprendre", intitule: "Concevoir la stratégie de création de valeur", tronc: false,
+    niveaux: { 2: ["Modéliser la proposition de valeur", ["S'adapter aux évolutions induites par le contexte d'incertitude", "Évaluer le potentiel d'un marché à partir d'une collecte d'informations pertinentes", "Modéliser les composantes d'un business model d'une entité existante", "Apprécier la cohérence d'un business model et de son business plan"]],
+               3: ["Sécuriser la proposition de valeur", ["Tester la viabilité financière d'un business model", "Apprécier les risques financiers, fiscaux et juridiques de l'entité ou de l'entrepreneur", "Préconiser les mesures de protection contre les risques", "Persuader une partie prenante de la viabilité du business plan", "Confronter son projet à son expérience de terrain"]] } },
+  { code: "C5", court: "Développer", intitule: "Assurer la gestion et le développement de la chaîne de valeur", tronc: false,
+    niveaux: { 2: ["Développer la chaîne de valeur", ["Promouvoir un projet, un événement ou une organisation par des actions de communication adaptées", "Identifier la variété et la complexité des processus de production et de supply chain", "Utiliser les techniques de négociation avec les partenaires commerciaux", "Évaluer les axes d'une démarche de marketing opérationnel, y compris digitale", "Évaluer le risque de trésorerie", "Contribuer à la gestion opérationnelle des ressources humaines"]],
+               3: ["Optimiser la chaîne de valeur", ["Concevoir une stratégie de communication en utilisant les outils adaptés, y compris digitaux", "Mettre en œuvre des processus de production et de supply chain adaptés à la situation de l'entité", "Concevoir une démarche de marketing opérationnel adaptée à l'entité", "Prévenir les risques de défaillance avec les outils adaptés", "Déterminer les axes principaux d'une politique de ressources humaines dans l'entité"]] } },
+];
+// Niveau de développement : tronc commun 1→2→3 ; GEMA commence en BUT2 (niveau 1) puis BUT3 (niveau 2).
+const niveauNum = (c, a) => c.tronc ? a : a - 1;
+// Compétences C4 et C5 propres à chaque parcours (référentiels nationaux 2022) ; C1 à C3 = tronc commun.
+const COMPETENCES_PARCOURS = {
+  GEMA: { intitule: "Gestion, entrepreneuriat et management d'activités", comps: COMPETENCES.filter((c) => !c.tronc) },
+  GPRH: { intitule: "Gestion et pilotage des ressources humaines", comps: [
+    { code: "C4", court: "Administrer", intitule: "Gérer l'administration du personnel", tronc: false,
+      niveaux: { 2: ["Conduire les activités administratives des RH", ["Établir un bulletin de paie en intégrant les éléments fixes et variables de la rémunération", "Appliquer rigoureusement les procédures, du recrutement à la fin du contrat de travail", "Administrer les dossiers personnels des salariés, y compris dans le domaine de la santé et de la sécurité au travail", "Produire des déclarations sociales fiables", "Restituer les résultats des tableaux de bord sociaux", "Organiser les élections, le renouvellement et le fonctionnement des instances représentatives du personnel"]],
+                 3: ["Optimiser les processus administratifs RH", ["Rendre compte des évolutions des obligations sociales et juridiques qui impactent l'organisation", "Optimiser la procédure de gestion de la paie et la politique de rémunération", "Proposer, après analyse, des indicateurs pertinents du dialogue social", "Réaliser un reporting RH adapté pour les parties prenantes internes", "Proposer des solutions d'optimisation de la performance sociale en fonction des choix stratégiques"]] } },
+    { code: "C5", court: "Développer", intitule: "Gérer le développement des ressources humaines", tronc: false,
+      niveaux: { 2: ["Mettre en œuvre les politiques RH", ["Mettre en œuvre les outils et les dispositifs de développement des emplois, des compétences et des carrières selon la stratégie de l'organisation", "Mettre en œuvre des outils et des techniques adaptés du processus de recrutement", "Mettre en œuvre la communication RH", "Identifier les enjeux et les outils d'une démarche de qualité de vie au travail", "Définir les enjeux et les dispositifs adaptés de RSE"]],
+                 3: ["Optimiser les politiques RH", ["Optimiser les dispositifs de développement RH", "Optimiser les outils et techniques du processus de recrutement", "Optimiser la communication RH en interne et en externe", "Analyser la pertinence des outils de la digitalisation de la gestion RH", "Optimiser les dispositifs de gestion de la diversité et de la qualité de vie au travail", "Optimiser les différentes politiques RH grâce à l'analyse des résultats des indicateurs de performance RH"]] } },
+  ] },
+  GC2F: { intitule: "Gestion comptable, fiscale et financière", comps: [
+    { code: "C4", court: "Produire", intitule: "Produire l'information comptable, fiscale et sociale de l'organisation", tronc: false,
+      niveaux: { 2: ["Contrôler l'information comptable, fiscale et sociale produite", ["Traiter et contrôler l'ensemble des opérations de comptabilité générale et de comptabilité approfondie en conformité avec les règles comptables, fiscales et sociales et dans le respect des normes professionnelles", "Distinguer les différents acteurs de la comptabilité et leur environnement réglementaire", "Prendre en charge la révision comptable en contrôlant les différents cycles de l'organisation", "Établir les comptes annuels à l'aide des outils de digitalisation"]],
+                 3: ["Optimiser l'information comptable, fiscale et sociale produite", ["Résoudre les problèmes comptables spécifiques à l'évaluation des actifs et passifs et à la détermination des charges et produits dans une organisation", "Appliquer les règles comptables, fiscales et sociales adaptées à l'organisation", "Réaliser un diagnostic et/ou un audit pour apporter des conseils", "Sécuriser l'information comptable, fiscale et sociale produite"]] } },
+    { code: "C5", court: "Évaluer", intitule: "Évaluer l'activité de l'organisation", tronc: false,
+      niveaux: { 2: ["Élaborer des outils d'analyse et de prévision de l'activité", ["Identifier les points forts et les points faibles de l'organisation, aussi bien en termes d'activité que de structure financière", "Mesurer la rentabilité d'un investissement", "Réaliser des prévisions au niveau de l'activité, de la trésorerie et du patrimoine dans une optique de financement de l'organisation", "Mettre en place une comptabilité analytique et une gestion budgétaire"]],
+                 3: ["Optimiser les outils d'analyse et de prévision de l'activité", ["Mettre en place une politique d'investissement cohérente", "Mettre en place les sources de financement nécessaires", "Établir un plan de financement équilibré", "Réaliser la gestion de trésorerie sur le court terme", "Réaliser à moyen et long terme des budgets d'exploitation et de trésorerie, des comptes de résultat et des bilans prévisionnels", "Évaluer les résultats et les performances de l'organisation par le contrôle budgétaire"]] } },
+  ] },
+};
+const parcoursDe = (p) => (COMPETENCES_PARCOURS[p] ? p : "GEMA");
+const compsParcours = (p) => [...COMPETENCES.filter((c) => c.tronc), ...COMPETENCES_PARCOURS[parcoursDe(p)].comps];
+const compsAnnee = (a, p) => compsParcours(p).filter((c) => c.niveaux[a]);
+const compParCode = (code, p) => compsParcours(p).find((c) => c.code === code);
+const NIVEAUX_EVAL = [["non_evalue", "Non évalué"], ["insuffisant", "Non acquis"], ["en_cours", "En cours d'acquisition"], ["acquis", "Acquis"], ["depasse", "Dépassé"]];
+// Note sur 20 obligatoire avec le niveau ; deux rendez-vous de suivi par année.
+// Note finale d'une compétence = 10 % × RDV 1 + 20 % × RDV 2 + 70 % × note de la compétence.
+const RDV = [{ n: 1, libelle: "1er rendez-vous de suivi", poids: 0.1 }, { n: 2, libelle: "2e rendez-vous de suivi", poids: 0.2 }];
+const POIDS_COMP = 0.7;
+const pct = (p) => `${Math.round(p * 100)} %`;
+const fmtNote = (n) => (n === null || n === undefined ? "" : `${String(n).replace(".", ",")}/20`);
+const lireNote = (s) => { const t = String(s || "").trim().replace(",", "."); if (!t) return null; const n = Number(t); return Number.isFinite(n) && n >= 0 && n <= 20 ? Math.round(n * 100) / 100 : undefined; };
+const noteFinale = (c, r1, r2) => ([c, r1, r2].some((x) => x === null || x === undefined) ? null : Math.round((0.1 * r1 + 0.2 * r2 + POIDS_COMP * c) * 100) / 100);
+const codeAC = (comp, annee, i) => `AC${comp.code.slice(1)}${niveauNum(comp, annee)}.${String(i + 1).padStart(2, "0")}`;
+const libEval = (c) => (NIVEAUX_EVAL.find((n) => n[0] === c) || NIVEAUX_EVAL[0])[1];
+const GUIDE = [["Expérience", "Qu'ai-je fait ? Dans quelle situation, avec quels enjeux ?"], ["Observation réflexive", "Qu'ai-je observé ? Qu'est-ce qui m'a surpris ou posé difficulté ?"], ["Conceptualisation", "Qu'ai-je appris ? Quels liens avec les apprentissages critiques visés ?"], ["Transfert", "Comment réutiliser cet apprentissage ailleurs ? Que devrais-je adapter ?"]];
+const MAX_TRACES = 3;
+const LIB_JOURNAL = { presentation_maj: "a mis à jour sa présentation", argumentaire_cree: "a rédigé l'argumentaire", argumentaire_maj: "a modifié l'argumentaire", trace_ajoutee: "a déposé une trace", trace_modifiee: "a modifié une trace", trace_supprimee: "a supprimé une trace", evaluation: "a évalué", evaluation_publiee: "a publié l'évaluation", rendez_vous: "a noté un rendez-vous de suivi", rendez_vous_publie: "a publié la note d'un rendez-vous de suivi", passage_annee: "a fait passer l'étudiant·e d'année", compte_modifie: "a modifié le compte" };
+
+// ---------- Jeu de démonstration ----------
+// Comptes de départ ; la liste vivante (S.users) s'enrichit par import ou ajout manuel.
+const BASE_USERS = [
+  { id: "ens-martin", prenom: "Claire", nom: "Martin", role: "admin", email: "claire.martin@exemple.fr" },
+  { id: "ens-bernard", prenom: "Thomas", nom: "Bernard", role: "enseignant", email: "thomas.bernard@exemple.fr" },
+  { id: "ens-lambert", prenom: "Sophie", nom: "Lambert", role: "enseignant", email: "sophie.lambert@exemple.fr" },
+  { id: "etu-dubois", prenom: "Léa", nom: "Dubois", role: "etudiant", annee: 1, groupe: "TD1", parcours: "GEMA", email: "lea.dubois@etu.exemple.fr" },
+  { id: "etu-moreau", prenom: "Hugo", nom: "Moreau", role: "etudiant", annee: 1, groupe: "TD1", parcours: "GEMA", email: "hugo.moreau@etu.exemple.fr" },
+  { id: "etu-lefevre", prenom: "Inès", nom: "Lefèvre", role: "etudiant", annee: 1, groupe: "TD2", parcours: "GEMA", email: "ines.lefevre@etu.exemple.fr" },
+  { id: "etu-garcia", prenom: "Nathan", nom: "Garcia", role: "etudiant", annee: 2, groupe: "TD1", parcours: "GEMA", email: "nathan.garcia@etu.exemple.fr" },
+  { id: "etu-roux", prenom: "Chloé", nom: "Roux", role: "etudiant", annee: 2, groupe: "TD1", parcours: "GEMA", email: "chloe.roux@etu.exemple.fr" },
+  { id: "etu-petit", prenom: "Yanis", nom: "Petit", role: "etudiant", annee: 2, groupe: "TD2", parcours: "GEMA", email: "yanis.petit@etu.exemple.fr" },
+  { id: "etu-fournier", prenom: "Manon", nom: "Fournier", role: "etudiant", annee: 3, groupe: "TD1", parcours: "GEMA", email: "manon.fournier@etu.exemple.fr" },
+  { id: "etu-girard", prenom: "Lucas", nom: "Girard", role: "etudiant", annee: 3, groupe: "TD1", parcours: "GEMA", email: "lucas.girard@etu.exemple.fr" },
+  { id: "etu-benali", prenom: "Sarah", nom: "Benali", role: "etudiant", annee: 2, groupe: "TD3", parcours: "GPRH", email: "sarah.benali@etu.exemple.fr" },
+  { id: "etu-laurent", prenom: "Maxime", nom: "Laurent", role: "etudiant", annee: 3, groupe: "TD2", parcours: "GPRH", email: "maxime.laurent@etu.exemple.fr" },
+  { id: "etu-perrin", prenom: "Julie", nom: "Perrin", role: "etudiant", annee: 2, groupe: "TD3", parcours: "GC2F", email: "julie.perrin@etu.exemple.fr" },
+  { id: "etu-masson", prenom: "Antoine", nom: "Masson", role: "etudiant", annee: 3, groupe: "TD2", parcours: "GC2F", email: "antoine.masson@etu.exemple.fr" },
+];
+const PARCOURS_GEA = ["GEMA", "GC2F", "GPRH", "CG2P"];
+const REFERENTS_DEMO = { "etu-dubois": "ens-bernard", "etu-moreau": "ens-bernard", "etu-garcia": "ens-bernard", "etu-roux": "ens-bernard", "etu-petit": "ens-bernard", "etu-lefevre": "ens-lambert", "etu-fournier": "ens-lambert", "etu-girard": "ens-lambert", "etu-benali": "ens-bernard", "etu-perrin": "ens-bernard", "etu-laurent": "ens-lambert", "etu-masson": "ens-lambert" };
+const ilYa = (j) => new Date(Date.now() - j * 86400000).toISOString();
+let seq = 1;
+function seed() {
+  const s = { pres: {}, args: {}, traces: [], evals: {}, journal: [], consult: {}, referents: { ...REFERENTS_DEMO }, users: BASE_USERS.map((u) => ({ ...u })), notifs: [], courriels: [], rdv: {} };
+  const log = (etu, acteur, annee, comp, type, detail, j) => s.journal.push({ id: seq++, etu, acteur, annee, comp, type, detail, at: ilYa(j) });
+  const arg = (etu, a, c, t, j) => { s.args[`${etu}|${a}|${c}`] = { texte: t, maj: ilYa(j) }; log(etu, etu, a, c, "argumentaire_cree", `${mots(t)} mots`, j); };
+  const tr = (etu, a, c, titre, desc, fichier, ko, j) => { s.traces.push({ id: "t" + seq++, etu, annee: a, comp: c, titre, desc, fichier, taille: ko * 1024, depose: ilYa(j), maj: ilYa(j) }); log(etu, etu, a, c, "trace_ajoutee", titre, j); };
+  const ev = (etu, a, c, niveau, note, com, ens, j, publiee = true) => {
+    s.evals[`${etu}|${a}|${c}`] = { niveau, note, com, ens, maj: ilYa(j), pub: publiee ? { niveau, note, com, at: ilYa(j) } : null };
+    log(etu, ens, a, c, "evaluation", `${libEval(niveau)} (brouillon)`, j);
+    if (publiee) {
+      log(etu, ens, a, c, "evaluation_publiee", libEval(niveau), j);
+      const auteur = BASE_USERS.find((u) => u.id === ens), comp = compParCode(c, BASE_USERS.find((u) => u.id === etu)?.parcours);
+      s.notifs.push({ id: "n" + seq++, dest: etu, lue: j > 30, at: ilYa(j), titre: `Évaluation publiée : ${c} ${comp.court} (BUT${a})`, detail: `${libEval(niveau)} · par ${auteur.prenom} ${auteur.nom}`, annee: a, onglet: c });
+    }
+  };
+
+  s.pres["etu-fournier"] = { texte: "Étudiante en BUT GEA parcours GEMA, j'effectue mon alternance dans une PME de distribution de matériel agricole. Je m'intéresse particulièrement à la création d'entreprise et au pilotage de projets.", projet: "Reprendre ou créer une entreprise dans le secteur agroalimentaire après une licence professionnelle ou un master entrepreneuriat.", maj: ilYa(40) };
+  arg("etu-fournier", 1, "C1", "Lors de la SAÉ « Diagnostic d'une organisation », j'ai analysé une boulangerie artisanale de mon quartier. J'ai identifié ses enjeux économiques (concurrence des grandes surfaces) et juridiques (statut d'EURL). J'ai d'abord eu du mal à distinguer les parties prenantes internes et externes ; la cartographie réalisée en groupe m'a permis de clarifier les relations entre les acteurs du processus d'approvisionnement.", 400);
+  tr("etu-fournier", 1, "C1", "Diagnostic de la boulangerie Martin", "Rapport de SAÉ : cartographie des parties prenantes et analyse PESTEL", "diagnostic-boulangerie.pdf", 812, 400);
+  ev("etu-fournier", 1, "C1", "acquis", 14, "Analyse claire et bien documentée. La cartographie des acteurs est pertinente.", "ens-martin", 380);
+  arg("etu-fournier", 3, "C4", "Dans le cadre de mon alternance, j'ai participé à l'étude de faisabilité d'une nouvelle gamme de services de maintenance. J'ai testé la viabilité financière du business model en construisant un plan de trésorerie sur trois ans et en simulant deux scénarios de prix. La présentation au directeur financier m'a obligée à argumenter mes hypothèses.", 3);
+  tr("etu-fournier", 3, "C4", "Business plan – offre de maintenance", "Plan de financement et prévisionnel de trésorerie présentés à la direction", "business-plan-maintenance.pdf", 1430, 3);
+  tr("etu-fournier", 3, "C4", "Support de présentation à la direction", "Diaporama de soutenance du projet (10 diapositives)", "presentation-direction.pdf", 2210, 2);
+  arg("etu-fournier", 3, "C1", "J'ai proposé une réorganisation du processus de gestion des commandes après avoir mesuré les délais de traitement sur deux mois.", 1);
+  arg("etu-girard", 3, "C2", "J'ai construit un tableau de bord sous Excel pour suivre les stocks de l'entreprise d'accueil.", 6);
+  s.pres["etu-garcia"] = { texte: "Étudiant en BUT2 GEA, passionné de sport et trésorier du BDE.", projet: "Contrôle de gestion dans le secteur du sport.", maj: ilYa(20) };
+  log("etu-garcia", "etu-garcia", null, null, "presentation_maj", "", 20);
+  arg("etu-garcia", 2, "C2", "Au cours de la SAÉ ERP, j'ai paramétré un cycle achats-ventes sur Odoo. J'ai traité les données de ventes pour identifier les produits les moins rentables et j'ai présenté mes conclusions sous forme de graphiques.", 10);
+  tr("etu-garcia", 2, "C2", "Rapport SAÉ ERP Odoo", "Captures du paramétrage et analyse des ventes", "rapport-sae-erp.pdf", 960, 10);
+  ev("etu-garcia", 2, "C2", "en_cours", 10.5, "Bonne maîtrise de l'outil. L'argumentaire doit davantage expliciter les risques évalués.", "ens-bernard", 8);
+  arg("etu-garcia", 2, "C3", "En tant que trésorier du BDE, j'ai coordonné l'organisation du gala avec quatre associations.", 1);
+  tr("etu-garcia", 2, "C3", "Rétroplanning du gala", "Diagramme de Gantt partagé avec les associations", "retroplanning-gala.pdf", 240, 0.2);
+  ev("etu-garcia", 2, "C3", "acquis", 15, "Bonne coordination entre associations ; détaillez la méthode de suivi.", "ens-bernard", 0.1, false);
+  // Rendez-vous de suivi : Manon (RDV 1 publié, RDV 2 en brouillon), Nathan (RDV 1 publié).
+  const rv = (etu, a, n, note, com, ens, j, publie) => { s.rdv[`${etu}|${a}|${n}`] = { date: ilYa(j).slice(0, 10), note, com, ens, maj: ilYa(j), pub: publie ? { note, com, at: ilYa(j) } : null }; };
+  rv("etu-fournier", 3, 1, 15, "Projet entrepreneurial bien engagé ; consolider les traces de C2.", "ens-lambert", 30, true);
+  rv("etu-fournier", 3, 2, 14, "Bonne progression, argumentaire C4 à finaliser.", "ens-lambert", 2, false);
+  rv("etu-garcia", 2, 1, 12, "Démarche réflexive à approfondir dans les argumentaires.", "ens-bernard", 25, true);
+  // Parcours GPRH et GC2F
+  arg("etu-benali", 2, "C4", "Pendant mon stage au service RH d'une clinique, j'ai préparé les éléments variables de paie (heures supplémentaires, primes de nuit) et vérifié les bulletins avant validation.", 6);
+  tr("etu-benali", 2, "C4", "Contrôle des éléments variables de paie", "Grille de contrôle et bulletin anonymisé (stage)", "controle-paie.pdf", 420, 6);
+  ev("etu-benali", 2, "C4", "en_cours", 12, "Bonne rigueur ; expliciter davantage le cadre juridique mobilisé.", "ens-bernard", 3);
+  rv("etu-benali", 2, 1, 13, "Bon démarrage ; penser à déposer des traces en C5.", "ens-bernard", 20, true);
+  arg("etu-laurent", 3, "C5", "En alternance, j'ai refondu le processus d'intégration des nouveaux arrivants : livret d'accueil, parcours de formation et questionnaire à trois mois.", 4);
+  tr("etu-laurent", 3, "C5", "Livret d'accueil des nouveaux arrivants", "Version diffusée par l'entreprise d'accueil", "livret-accueil.pdf", 610, 4);
+  arg("etu-perrin", 2, "C4", "Lors de la SAÉ « Révision des comptes », j'ai contrôlé le cycle achats-fournisseurs d'une PME et identifié deux anomalies de cut-off.", 5);
+  tr("etu-perrin", 2, "C4", "Dossier de révision du cycle fournisseurs", "Feuilles de travail et note de synthèse (SAÉ)", "revision-fournisseurs.pdf", 530, 5);
+  arg("etu-masson", 3, "C5", "J'ai construit le budget de trésorerie sur douze mois de mon entreprise d'accueil et proposé un plan de financement pour un véhicule utilitaire.", 2);
+  tr("etu-masson", 3, "C5", "Budget de trésorerie et plan de financement", "Tableur commenté présenté au gérant", "budget-tresorerie.pdf", 380, 2);
+  ev("etu-masson", 3, "C5", "acquis", 15, "Prévisions cohérentes et bien argumentées.", "ens-lambert", 1, false);
+  arg("etu-roux", 1, "C3", "En BUT1, j'ai animé l'équipe projet du Projet Personnel et Professionnel : répartition des tâches, comptes rendus de réunion.", 5);
+  tr("etu-roux", 1, "C3", "Comptes rendus de réunion PPP", "Trois comptes rendus rédigés et diffusés à l'équipe", "comptes-rendus-ppp.pdf", 310, 5);
+  arg("etu-roux", 2, "C4", "J'ai modélisé le business model d'une start-up locale avec le Business Model Canvas.", 2);
+  arg("etu-dubois", 1, "C1", "J'ai étudié le fonctionnement d'une mairie pour comprendre la différence entre une organisation publique et une entreprise privée.", 4);
+  tr("etu-dubois", 1, "C1", "Fiche d'identité de la mairie", "Organigramme et missions des services", "fiche-mairie.pdf", 180, 4);
+  s.consult["ens-bernard|etu-garcia"] = ilYa(3);
+  return s;
+}
+
+// ---------- État ----------
+const CLE = "folio-gea-demo-v6";
+let D;
+try { D = JSON.parse(localStorage.getItem(CLE) || "null"); } catch (e) { D = null; }
+if (!D || !D.data) D = { data: seed(), seq: 1000 };
+seq = D.seq || 1000;
+const S = D.data;
+let USERS = S.users;
+let ui = { user: "etu-fournier", etu: "etu-fournier", annee: 3, onglet: "C4", promo: 2, vuAvant: null, flash: {}, ouvert: {} };
+try { const u = JSON.parse(sessionStorage.getItem(CLE + "-ui") || "null"); if (u) ui = { ...ui, ...u, flash: {}, ouvert: {} }; } catch (e) {}
+function save() {
+  D.seq = seq;
+  try { localStorage.setItem(CLE, JSON.stringify(D)); } catch (e) {}
+  try { sessionStorage.setItem(CLE + "-ui", JSON.stringify({ user: ui.user, etu: ui.etu, annee: ui.annee, onglet: ui.onglet, promo: ui.promo, vuAvant: ui.vuAvant })); } catch (e) {}
+}
+
+// ---------- Utilitaires ----------
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function mots(t) { return (t || "").trim() ? t.trim().split(/\s+/).length : 0; } // déclarée (hissée) : utilisée par seed()
+const user = (id) => USERS.find((u) => u.id === id);
+const nom = (id) => { const u = user(id); return u ? `${u.prenom} ${u.nom}` : id; };
+const estEns = (u) => u && u.role !== "etudiant";
+const now = () => new Date().toISOString();
+const fmtD = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+const dateC = (iso) => fmtD.format(new Date(iso));
+function rel(iso) {
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 60) return "à l'instant";
+  if (s < 3600) return `il y a ${Math.floor(s / 60)} min`;
+  if (s < 86400) return `il y a ${Math.floor(s / 3600)} h`;
+  if (s < 7 * 86400) return `il y a ${Math.floor(s / 86400)} j`;
+  return dateC(iso);
+}
+const taille = (o) => o < 1048576 ? `${Math.max(1, Math.round(o / 1024))} Ko` : `${(o / 1048576).toFixed(1)} Mo`;
+const k = (etu, a, c) => `${etu}|${a}|${c}`;
+const log = (etu, annee, comp, type, detail) => S.journal.push({ id: seq++, etu, acteur: ui.user, annee, comp, type, detail, at: now() });
+const tracesDe = (etu, a, c) => S.traces.filter((t) => t.etu === etu && t.annee === a && t.comp === c);
+const derniereModif = (etu, a, c) => S.journal.filter((j) => j.etu === etu && j.acteur === etu && j.annee === a && j.comp === c).reduce((m, j) => (j.at > m ? j.at : m), "");
+function etat(etu, a, c) {
+  const arg = (S.args[k(etu, a, c)]?.texte || "").trim();
+  const n = tracesDe(etu, a, c).length;
+  return arg && n ? "complet" : arg || n ? "partiel" : "vide";
+}
+const pill = (n, note) => `<span class="pill ev-${n}">${esc(libEval(n))}${n !== "non_evalue" && note !== null && note !== undefined ? ` · ${fmtNote(note)}` : ""}</span>`;
+const cvar = (c) => `var(--${c.toLowerCase()})`;
+// Référent : l'administrateur suit tout le monde, un enseignant uniquement ses étudiants.
+const referentDe = (etuId) => S.referents[etuId] || null;
+const suit = (u, etuId) => u.role === "admin" || (u.role === "enseignant" && referentDe(etuId) === u.id);
+const estActif = (u) => !!u && u.actif !== false;
+const prefDe = (u) => u.pref || (u.role === "etudiant" ? "immediat" : "aucun");
+// Notification dans l'outil + courriel en file d'attente selon la préférence du destinataire.
+function notifierAvecCourriel(n) {
+  S.notifs.push({ id: "n" + seq++, lue: false, at: now(), ...n });
+  const d = user(n.dest);
+  if (d && estActif(d) && d.email && prefDe(d) !== "aucun") S.courriels.push({ dest: d.id, adresse: d.email, sujet: n.titre, mode: prefDe(d), statut: "en_attente", at: now() });
+}
+// Le référent est prévenu des dépôts de l'étudiant ; tant qu'il n'a pas lu, on met à jour la même notification.
+function prevenirReferent(etuId, annee, comp, quoi) {
+  const ref = referentDe(etuId), e = user(etuId);
+  if (!ref) return;
+  const c = comp ? compParCode(comp, e.parcours) : null;
+  const titre = c ? `${e.prenom} ${e.nom} · ${c.code} ${c.court} (BUT${annee}) mis à jour` : `${e.prenom} ${e.nom} a mis à jour sa présentation`;
+  const cle = `${etuId}|${annee}|${comp}`;
+  const enCours = S.notifs.find((n) => n.dest === ref && n.cle === cle && !n.lue);
+  if (enCours) { enCours.nb = (enCours.nb || 1) + 1; enCours.titre = titre; enCours.detail = `${enCours.nb} modifications depuis votre dernière lecture · dernière : ${quoi}`; enCours.at = now(); return; }
+  notifierAvecCourriel({ dest: ref, cle, titre, detail: quoi, annee: annee || e.annee, onglet: comp || "presentation", etu: etuId });
+}
+const nonPublie = (ev) => !!ev && ev.niveau !== "non_evalue" && (!ev.pub || ev.pub.niveau !== ev.niveau || ev.pub.com !== ev.com || ev.pub.note !== ev.note);
+const rdvNonPublie = (r) => !!r && r.note !== null && (!r.pub || r.pub.note !== r.note || r.pub.com !== r.com);
+const rdvDe = (etu, a, n) => S.rdv[`${etu}|${a}|${n}`];
+const peutModifier = (etu, a) => { const u = user(ui.user); return u.role === "etudiant" && u.id === etu && (a === undefined || a <= u.annee); };
+
+// ---------- Thème clair / sombre ----------
+// Clair par défaut ; le choix de l'utilisateur est mémorisé dans son navigateur.
+const CLE_THEME = "folio-gea-theme";
+function themeActuel() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }
+function appliquerTheme(theme) { document.documentElement.dataset.theme = theme; }
+try { appliquerTheme(localStorage.getItem(CLE_THEME) === "dark" ? "dark" : "light"); } catch (e) { appliquerTheme("light"); }
+
+// ---------- Rendu ----------
+function render() {
+  const u = user(ui.user);
+  const opts = (role) => USERS.filter((x) => estActif(x) && (role === "e" ? x.role === "etudiant" : x.role !== "etudiant"))
+    .map((x) => `<option value="${x.id}" ${x.id === ui.user ? "selected" : ""}>${esc(x.prenom + " " + x.nom)}${x.annee ? ` — BUT${x.annee}` : x.role === "admin" ? " — admin" : ""}</option>`).join("");
+  let corps;
+  const mesNotifs = S.notifs.filter((n) => n.dest === u.id);
+  const nonLues = mesNotifs.filter((n) => !n.lue).length;
+  if (ui.vue === "notifications") corps = vueNotifications(mesNotifs);
+  else if (ui.vue === "compte") corps = vueCompte(u);
+  else if (u.role === "admin" && ui.vue === "fiche") corps = vueFiche();
+  else if (u.role === "admin" && ui.vue === "passage") corps = vuePassage();
+  else if (u.role === "admin" && ui.vue === "affectations") corps = vueAffectations();
+  else if (estEns(u) && (!ui.etu || !suit(u, ui.etu))) { ui.etu = null; corps = vueTableau(u); }
+  else corps = vuePortfolio(u);
+  $("#app").innerHTML = `
+    <header class="appbar"><div class="wrap">
+      <div class="brand"><div class="brand-mark">GEA</div><div><strong>Folio GEA</strong><span>Portfolio de compétences · PAÉ</span></div></div>
+      ${estEns(u) ? `<button class="btn" data-act="tableau">${u.role === "admin" ? "Suivi des promotions" : "Mes étudiants"}</button>` : `<button class="btn" data-act="portfolio">Mon portfolio</button>`}
+      ${u.role === "admin" ? `<button class="btn" data-act="affectations">Étudiants et affectations</button>` : ""}
+      <button class="bell" data-act="notifications" aria-label="Notifications${nonLues ? ` : ${nonLues} non lue${nonLues > 1 ? "s" : ""}` : ""}" title="Notifications">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" stroke-linejoin="round"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" stroke-linecap="round"/></svg>
+        ${nonLues ? `<span class="bell-count">${nonLues > 9 ? "9+" : nonLues}</span>` : ""}
+      </button>
+      <button class="btn" data-act="compte" title="Mon compte et préférences de notification">${esc(u.prenom + " " + u.nom)}</button>
+      <button class="theme-btn" data-act="theme" aria-label="${themeActuel() === "dark" ? "Passer au thème clair" : "Passer au thème sombre"}" title="${themeActuel() === "dark" ? "Thème clair" : "Thème sombre"}">
+        ${themeActuel() === "dark"
+          ? `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke-linecap="round"/></svg>`
+          : `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" stroke-linejoin="round"/></svg>`}
+      </button>
+      <div class="account"><label for="compte">Compte de démonstration</label>
+        <select id="compte"><optgroup label="Enseignants">${opts("t")}</optgroup><optgroup label="Étudiants">${opts("e")}</optgroup></select>
+        <button class="btn" data-act="reset" title="Remettre le jeu de démonstration à zéro">Réinitialiser</button>
+      </div>
+    </div></header>
+    <div class="demo-note"><div class="wrap">Maquette de démonstration : comptes et données fictifs, enregistrés uniquement dans ce navigateur. Les PDF ne sont pas conservés ici (seulement leur nom) ; la version locale de l'application les stocke et produit l'export PDF.</div></div>
+    <main class="wrap">${corps}</main>`;
+  // Les notifications affichées sont marquées lues ; la mise en évidence reste jusqu'au prochain affichage.
+  if (ui.vue === "notifications" && nonLues) { mesNotifs.forEach((n) => (n.lue = true)); save(); }
+}
+
+function vueNotifications(notifs) {
+  const liste = [...notifs].sort((a, b) => b.at.localeCompare(a.at));
+  return `<div class="page-head"><div><h1>Notifications</h1><div class="sub">L'envoi par courriel sera branché avec la messagerie de l'université, à l'adresse importée.</div></div></div>
+    ${liste.length ? `<ul class="card notif-list">${liste.map((n) => `<li><button class="notif ${n.lue ? "" : "unread"}" data-ouvrir-notif="${n.id}">
+      <span class="dot" style="background:${n.lue ? "transparent" : "var(--new)"}"></span>
+      <span style="flex:1;min-width:0"><strong>${esc(n.titre)}</strong><span class="sub" style="display:block">${esc(n.detail)}</span></span>
+      <span class="when">${rel(n.at)}</span></button></li>`).join("")}</ul>`
+      : `<div class="card empty" style="text-align:center;padding:32px">Vous serez prévenu·e ici dès qu'une évaluation de votre portfolio sera publiée.</div>`}`;
+}
+
+function vuePortfolio(u) {
+  const etu = user(ui.etu);
+  const max = etu.annee;
+  if (ui.annee > max) ui.annee = max;
+  const comps = compsAnnee(ui.annee, etu.parcours);
+  if (!["presentation", "complet", "suivi"].includes(ui.onglet) && !comps.some((c) => c.code === ui.onglet)) ui.onglet = "presentation";
+  const ens = estEns(u);
+  const nouveau = (c) => { const m = derniereModif(etu.id, ui.annee, c); return ens && m && (!ui.vuAvant || m > ui.vuAvant); };
+  const ongletsComp = comps.map((c) => {
+    const e = etat(etu.id, ui.annee, c.code);
+    return `<button class="tab" role="tab" aria-selected="${ui.onglet === c.code}" data-onglet="${c.code}">
+      <span class="dot" style="background:${cvar(c.code)}"></span>${c.code} · ${c.court}
+      <span class="state" style="color:${e === "complet" ? "var(--ok)" : e === "partiel" ? "var(--warn)" : "var(--line)"}" title="${e === "complet" ? "Argumentaire et trace déposés" : e === "partiel" ? "Dépôt incomplet" : "Rien déposé"}">${e === "complet" ? "●" : e === "partiel" ? "◐" : "○"}</span>
+      ${nouveau(c.code) ? `<span class="tag-new">Nouveau</span>` : ""}</button>`;
+  }).join("");
+  const comp = comps.find((c) => c.code === ui.onglet);
+  let contenu;
+  if (comp) contenu = vueCompetence(u, etu, comp);
+  else if (ui.onglet === "complet") contenu = vueComplete(u, etu);
+  else if (ui.onglet === "suivi") contenu = vueSuivi(u, etu);
+  else contenu = vuePresentation(u, etu);
+  return `
+    ${ens ? `<button class="btn-link back" data-act="tableau">← Tableau de la promotion BUT${max}</button>` : ""}
+    <div class="page-head">
+      <div><h1>${u.id === etu.id ? "Mon portfolio" : `Portfolio de ${esc(etu.prenom + " " + etu.nom)}`}</h1>
+        <div class="sub">BUT${max} GEA · parcours ${parcoursDe(etu.parcours)} (${COMPETENCES_PARCOURS[parcoursDe(etu.parcours)].intitule}) · ${etu.groupe} · référent·e : ${referentDe(etu.id) ? esc(nom(referentDe(etu.id))) : "non affecté"}</div></div>
+      <div class="seg" role="group" aria-label="Année de BUT">${[1, 2, 3].map((a) => `<button data-annee="${a}" aria-pressed="${a === ui.annee}" ${a > max ? "disabled title=\"Année pas encore commencée\"" : ""}>BUT${a}${a < max ? ` <small>historique</small>` : ""}</button>`).join("")}</div>
+    </div>
+    ${peutModifier(etu.id) && ui.annee < max && comp ? `<div class="notice info" style="margin-bottom:14px">Vous complétez l'historique de votre BUT${ui.annee}. Ces dépôts restent rattachés au niveau de compétence de BUT${ui.annee}.</div>` : ""}
+    <nav class="tabs" role="tablist" aria-label="Onglets du portfolio">
+      <button class="tab" role="tab" aria-selected="${ui.onglet === "presentation"}" data-onglet="presentation">Présentation</button>
+      ${ongletsComp}
+      <button class="tab" role="tab" aria-selected="${ui.onglet === "suivi"}" data-onglet="suivi">Suivi et notes</button>
+      <button class="tab" role="tab" aria-selected="${ui.onglet === "complet"}" data-onglet="complet">Portfolio complet</button>
+    </nav>
+    ${contenu}`;
+}
+
+function vuePresentation(u, etu) {
+  const p = S.pres[etu.id];
+  const modif = peutModifier(etu.id);
+  const f = ui.flash.pres;
+  const corps = modif ? `
+    <form class="form" data-form="pres">
+      <label class="field">Qui suis-je ? <textarea id="pres-texte" name="texte" rows="7" class="input" placeholder="Votre parcours, vos expériences (stages, alternance, engagements), vos centres d'intérêt…">${esc(p?.texte)}</textarea></label>
+      <label class="field">Mon projet professionnel <textarea id="pres-projet" name="projet" rows="4" class="input" placeholder="Le métier ou le secteur visé, la poursuite d'études envisagée…">${esc(p?.projet)}</textarea></label>
+      <div class="row"><button class="btn btn-primary">Enregistrer</button>${f ? `<span class="${f.ok ? "msg-ok" : "msg-err"}" role="status">${esc(f.m)}</span>` : ""}</div>
+    </form>` : p ? `<p class="prose">${esc(p.texte)}</p><h3 style="font-size:15px;margin:16px 0 4px">Projet professionnel</h3><p class="prose">${esc(p.projet)}</p>`
+    : `<p class="empty">L'étudiant·e n'a pas encore rédigé sa présentation.</p>`;
+  return `<div class="grid-main">
+    <section class="card"><h2>Présentation de l'étudiant·e ${p ? `<small>Mise à jour le ${dateC(p.maj)}</small>` : ""}</h2>${corps}</section>
+    <aside class="card"><h2>Le portfolio en bref</h2><ul class="ac" style="color:var(--muted)">
+      <li>Un onglet par compétence : un <strong style="color:var(--fg)">argumentaire</strong> réflexif et 1 à ${MAX_TRACES} <strong style="color:var(--fg)">traces PDF</strong> qui l'appuient.</li>
+      <li>Les compétences et niveaux attendus changent selon l'année : 3 compétences en BUT1, 5 en BUT2 et BUT3.</li>
+      <li>Les années précédentes restent consultables et peuvent être complétées.</li>
+      <li>L'onglet « Portfolio complet » rassemble l'ensemble pour la lecture et l'évaluation.</li></ul></aside>
+  </div>`;
+}
+
+function vueCompetence(u, etu, c) {
+  const a = ui.annee, cle = k(etu.id, a, c.code);
+  const [libNiv, acs] = c.niveaux[a];
+  const modif = peutModifier(etu.id, a);
+  const ens = estEns(u);
+  const arg = S.args[cle];
+  const traces = tracesDe(etu.id, a, c.code);
+  const ev = S.evals[cle];
+  const dm = derniereModif(etu.id, a, c.code);
+  const fA = ui.flash.arg, fT = ui.flash.trace, fE = ui.flash.eval;
+  const blocArg = modif ? `
+    <form class="form" data-form="arg">
+      <textarea id="arg-${cle}" name="texte" rows="11" class="input" data-compteur placeholder="Décrivez la situation, ce que vous avez fait, ce que vous en avez appris, et en quoi vos traces en témoignent…">${esc(arg?.texte)}</textarea>
+      <div class="row"><button class="btn btn-primary">Enregistrer l'argumentaire</button><span class="count" data-count>${mots(arg?.texte)} mots</span>${fA ? `<span class="${fA.ok ? "msg-ok" : "msg-err"}" role="status">${esc(fA.m)}</span>` : ""}</div>
+    </form>` : arg?.texte ? `<p class="prose">${esc(arg.texte)}</p><div class="count" style="margin-top:8px">${mots(arg.texte)} mots</div>` : `<p class="empty">Aucun argumentaire déposé.</p>`;
+  const listeTraces = traces.map((t) => `
+    <li class="trace"><div class="trace-top"><div class="pdf">PDF</div><div style="min-width:0;flex:1">
+      <div class="trace-title">${esc(t.titre)}</div>${t.desc ? `<div class="sub">${esc(t.desc)}</div>` : ""}
+      <div class="meta">${esc(t.fichier)} · ${taille(t.taille)} · déposée le ${dateC(t.depose)}${t.maj !== t.depose ? ` · modifiée ${rel(t.maj)}` : ""}</div></div></div>
+      ${modif ? (ui.ouvert["edit-" + t.id] ? `
+        <form class="form drop" data-form="edit" data-trace="${t.id}">
+          <input id="et-${t.id}" name="titre" class="input" value="${esc(t.titre)}" required>
+          <input id="ed-${t.id}" name="desc" class="input" value="${esc(t.desc)}" placeholder="Contexte">
+          <label class="field" style="font-weight:400;font-size:13px">Remplacer le fichier (facultatif)<input id="ef-${t.id}" name="fichier" type="file" accept="application/pdf,.pdf"></label>
+          <div class="row"><button class="btn btn-primary">Enregistrer</button><button type="button" class="btn" data-act="fermer" data-cle="edit-${t.id}">Annuler</button></div>
+        </form>` : `<div class="row">
+          <button class="btn-link" data-act="ouvrir" data-cle="edit-${t.id}">Modifier / remplacer</button>
+          ${ui.ouvert["del-" + t.id] ? `<button class="btn-link btn-danger" data-act="supprimer" data-trace="${t.id}"><strong>Confirmer la suppression</strong></button><button class="btn-link" data-act="fermer" data-cle="del-${t.id}">Annuler</button>`
+            : `<button class="btn-link btn-danger" data-act="ouvrir" data-cle="del-${t.id}">Supprimer</button>`}</div>`) : ""}
+    </li>`).join("");
+  const formTrace = modif && traces.length < MAX_TRACES ? (ui.ouvert.nouvelle ? `
+    <form class="form drop" data-form="trace" style="margin-top:12px">
+      <div class="two"><label class="field">Titre de la trace *<input id="nt-titre" name="titre" class="input" required placeholder="Ex. : Rapport de SAÉ diagnostic"></label>
+        <label class="field">Fichier PDF * (10 Mo max.)<input id="nt-fichier" name="fichier" type="file" accept="application/pdf,.pdf" required></label></div>
+      <label class="field">Contexte (facultatif)<input id="nt-desc" name="desc" class="input" placeholder="SAÉ, stage, projet associatif… et date de réalisation"></label>
+      <div class="row"><button class="btn btn-primary">Déposer</button><button type="button" class="btn" data-act="fermer" data-cle="nouvelle">Annuler</button>${fT && !fT.ok ? `<span class="msg-err" role="status">${esc(fT.m)}</span>` : ""}</div>
+    </form>` : `<div class="row" style="margin-top:12px"><button class="btn" data-act="ouvrir" data-cle="nouvelle">+ Déposer une trace (PDF)</button>${fT?.ok ? `<span class="msg-ok" role="status">${esc(fT.m)}</span>` : ""}</div>`) : "";
+  const journal = S.journal.filter((j) => j.etu === etu.id && j.annee === a && j.comp === c.code).sort((x, y) => y.at.localeCompare(x.at));
+  const aside = ens ? `
+    <section class="card"><h2>Évaluation</h2>
+      ${statutPublication(ev)}
+      ${ev && dm > ev.maj ? `<div class="notice warn" style="margin-bottom:12px">L'étudiant·e a modifié ce dépôt après la dernière évaluation (${rel(ev.maj)}).</div>` : ""}
+      <form class="form" data-form="eval">
+        <fieldset class="radios" style="border:0;padding:0;margin:0"><legend style="font-weight:500;font-size:14px;margin-bottom:4px">Niveau atteint</legend>
+          ${NIVEAUX_EVAL.map(([code, lib]) => `<label><input type="radio" id="ev-${code}" name="niveau" value="${code}" ${(ev?.niveau || "non_evalue") === code ? "checked" : ""}> ${lib}</label>`).join("")}</fieldset>
+        <label class="field">Note sur 20 <span style="color:var(--bad)">*</span>
+          <span class="row" style="gap:8px"><input class="input" id="ev-note" name="note" inputmode="decimal" style="width:96px" value="${ev?.note !== null && ev?.note !== undefined ? String(ev.note).replace(".", ",") : ""}" placeholder="ex. 13,5"><span class="sub" style="white-space:nowrap">/ 20</span></span>
+          <span class="sub" style="font-size:12px;font-weight:400">Obligatoire dès qu'un niveau est choisi : la note accompagne le niveau qualitatif.</span></label>
+        <label class="field">Commentaire<textarea id="ev-com" name="com" rows="5" class="input" placeholder="Points forts, axes de progrès, éléments attendus…">${esc(ev?.com)}</textarea></label>
+        <div class="row"><button class="btn" value="brouillon">Enregistrer le brouillon</button><button class="btn btn-primary" value="publier">Enregistrer et publier</button></div>
+        ${fE ? `<span class="${fE.ok ? "msg-ok" : "msg-err"}" role="status">${esc(fE.m)}</span>` : ""}
+      </form></section>` : ev?.pub ? `<section class="card"><h2>Retour de l'enseignant·e <small>Publiée le ${dateC(ev.pub.at)}</small></h2>${pill(ev.pub.niveau, ev.pub.note)}${ev.pub.com ? `<p class="prose" style="margin-top:10px">${esc(ev.pub.com)}</p>` : ""}</section>` : "";
+  return `<div class="grid-main">
+    <div class="stack">
+      <div class="comp-head" style="background:var(--${c.code.toLowerCase()}-soft)">
+        <div class="eyebrow" style="color:${cvar(c.code)}">${c.code} · ${c.tronc ? "Tronc commun" : `Parcours ${parcoursDe(etu.parcours)}`} · BUT${a}</div>
+        <h2>${esc(c.intitule)}</h2><div>Niveau ${niveauNum(c, a)} — <strong>${esc(libNiv)}</strong></div>
+      </div>
+      <section class="card"><h2>Argumentaire ${arg ? `<small>Modifié ${rel(arg.maj)}</small>` : ""}</h2>${blocArg}</section>
+      <section class="card"><h2>Traces <small>${traces.length} / ${MAX_TRACES}</small></h2>
+        ${traces.length ? `<ul class="plain">${listeTraces}</ul>` : `<p class="empty">Aucune trace déposée.</p>`}${formTrace}</section>
+    </div>
+    <aside class="stack">
+      ${aside}
+      <section class="card"><h2>Apprentissages critiques visés</h2><ul class="plain" style="gap:7px;font-size:14px">${acs.map((x, i) => `<li style="display:flex;gap:8px"><span style="font:600 12px var(--font-data);color:var(--accent);white-space:nowrap;line-height:21px">${codeAC(c, a, i)}</span><span>${esc(x)}</span></li>`).join("")}</ul></section>
+      ${ens ? `<section class="card"><h2>Historique de ce dépôt</h2>${feed(journal, { sansComp: true })}</section>`
+        : `<section class="card guide"><h2>Structurer son argumentaire</h2><ol>${GUIDE.map(([e, q]) => `<li><strong>${e}</strong><span>${q}</span></li>`).join("")}</ol></section>`}
+    </aside>
+  </div>`;
+}
+
+// Synthèse des notes d'une année ; publie = ce que voit l'étudiant, sinon brouillons du référent.
+function synthese(etu, a, publie) {
+  const noteRdv = (n) => { const r = rdvDe(etu.id, a, n); return publie ? (r?.pub?.note ?? null) : (r?.note ?? null); };
+  const r1 = noteRdv(1), r2 = noteRdv(2);
+  const cel = (n) => (n === null || n === undefined ? `<span class="sub">—</span>` : fmtNote(n));
+  return `<div class="card" style="padding:0;overflow:hidden"><div class="table-wrap"><table class="promo"><thead><tr>
+      <th>Compétence</th><th>Niveau</th><th>Compétence (${pct(POIDS_COMP)})</th><th>RDV 1 (${pct(RDV[0].poids)})</th><th>RDV 2 (${pct(RDV[1].poids)})</th><th>Note finale</th></tr></thead><tbody>
+    ${compsAnnee(a, etu.parcours).map((c) => {
+      const ev = S.evals[k(etu.id, a, c.code)];
+      const niveau = (publie ? ev?.pub?.niveau : ev?.niveau) || "non_evalue";
+      const note = publie ? (ev?.pub?.note ?? null) : (ev?.note ?? null);
+      const fin = noteFinale(note, r1, r2);
+      return `<tr><td><span class="dot" style="background:${cvar(c.code)};margin-right:6px"></span><strong>${c.code}</strong> ${c.court}</td><td style="text-align:center">${pill(niveau)}</td>
+        <td style="text-align:center">${cel(note)}</td><td style="text-align:center">${cel(r1)}</td><td style="text-align:center">${cel(r2)}</td>
+        <td style="text-align:center;font-weight:700;font-size:15px">${fin === null ? `<span class="sub" style="font-weight:400;font-size:12px">en attente</span>` : fmtNote(fin)}</td></tr>`;
+    }).join("")}</tbody></table></div>
+    <p class="sub" style="font-size:12px;margin:0;padding:10px 16px;border-top:1px solid var(--line)">Note finale = ${pct(RDV[0].poids)} × RDV 1 + ${pct(RDV[1].poids)} × RDV 2 + ${pct(POIDS_COMP)} × note de la compétence, affichée quand les trois notes sont ${publie ? "publiées" : "saisies"}.${publie ? "" : " Calcul provisoire sur les brouillons : l'étudiant·e ne voit que les notes publiées."}</p></div>`;
+}
+
+function vueSuivi(u, etu) {
+  const a = ui.annee, ens = suit(u, etu.id), f = ui.flash.rdv;
+  const aPublier = compsAnnee(a, etu.parcours).filter((c) => { const ev = S.evals[k(etu.id, a, c.code)]; return nonPublie(ev) && ev.note !== null && ev.note !== undefined; }).length + RDV.filter((d) => rdvNonPublie(rdvDe(etu.id, a, d.n))).length;
+  return `<div class="stack">
+    <div class="two" style="gap:18px">${RDV.map((d) => {
+      const r = rdvDe(etu.id, a, d.n);
+      const statut = !r ? "" : !r.pub ? `<div class="notice" style="background:var(--sunk);color:var(--muted);margin-bottom:12px">Brouillon non publié : invisible pour l'étudiant·e.</div>`
+        : rdvNonPublie(r) ? `<div class="notice warn" style="margin-bottom:12px">Modifications non publiées. L'étudiant·e voit encore ${fmtNote(r.pub.note)}.</div>`
+        : `<div class="notice" style="background:var(--ok-soft);color:var(--ok);margin-bottom:12px">Publié le ${dateC(r.pub.at)} : visible par l'étudiant·e.</div>`;
+      return `<section class="card"><h2>${d.libelle} <small>${pct(d.poids)} de chaque note finale</small></h2>
+        ${ens ? `${statut}<form class="form" data-form="rdv" data-numero="${d.n}">
+          <div class="row"><label class="field">Date<input class="input" type="date" id="rdv${d.n}-date" name="date" value="${esc(r?.date || "")}"></label>
+          <label class="field">Note sur 20 <span style="color:var(--bad)">*</span><span class="row" style="gap:8px"><input class="input" id="rdv${d.n}-note" name="note" inputmode="decimal" style="width:96px" value="${r?.note !== null && r?.note !== undefined ? String(r.note).replace(".", ",") : ""}" placeholder="ex. 14"><span class="sub" style="white-space:nowrap">/ 20</span></span></label></div>
+          <label class="field">Compte rendu<textarea class="input" id="rdv${d.n}-com" name="com" rows="4" placeholder="Points abordés, progrès, objectifs pour la suite…">${esc(r?.com || "")}</textarea></label>
+          <div class="row"><button class="btn" value="brouillon">Enregistrer le brouillon</button><button class="btn btn-primary" value="publier">Enregistrer et publier</button></div>
+          ${f?.n === d.n ? `<span class="${f.ok ? "msg-ok" : "msg-err"}" role="status">${esc(f.m)}</span>` : ""}</form>`
+        : r?.pub ? `<div style="font:600 26px var(--font-data)">${fmtNote(r.pub.note)}</div>${r.date ? `<div class="sub" style="font-size:12px">Rendez-vous du ${dateC(r.date)}</div>` : ""}${r.pub.com ? `<p class="prose" style="margin-top:8px">${esc(r.pub.com)}</p>` : ""}`
+        : `<p class="empty">Pas encore de note publiée pour ce rendez-vous.</p>`}</section>`;
+    }).join("")}</div>
+    <section class="stack" style="gap:10px"><h2 style="font-size:16px;margin:0">Notes finales par compétence · BUT${a}</h2>${synthese(etu, a, !ens)}
+      ${ens ? `<div class="row">${aPublier ? `<button class="btn btn-primary" data-act="publier-annee" data-annee-pub="${a}">${aPublier > 1 ? `Publier les ${aPublier} notes en brouillon` : "Publier la note en brouillon"}</button>` : `<button class="btn" disabled>Tout est publié</button>`}${ui.flash.pub?.annee === a ? `<span class="msg-ok" role="status">${esc(ui.flash.pub.m)}</span>` : ""}</div>` : ""}
+    </section></div>`;
+}
+
+function statutPublication(ev) {
+  if (!ev || ev.niveau === "non_evalue") return `<p class="sub" style="font-size:12.5px;margin:0 0 12px">Non évalué. L'étudiant·e ne voit l'évaluation qu'une fois publiée.</p>`;
+  if (!ev.pub) return `<div class="notice" style="background:var(--sunk);color:var(--muted);margin-bottom:12px">Brouillon non publié : invisible pour l'étudiant·e.</div>`;
+  if (nonPublie(ev)) return `<div class="notice warn" style="margin-bottom:12px">Modifications non publiées. L'étudiant·e voit encore : ${esc(libEval(ev.pub.niveau))}${ev.pub.note !== null && ev.pub.note !== undefined ? ` · ${fmtNote(ev.pub.note)}` : ""} (publiée le ${dateC(ev.pub.at)}).</div>`;
+  return `<div class="notice" style="background:var(--ok-soft);color:var(--ok);margin-bottom:12px">Publiée le ${dateC(ev.pub.at)} : visible par l'étudiant·e.</div>`;
+}
+
+function vueComplete(u, etu) {
+  const p = S.pres[etu.id];
+  const annees = [1, 2, 3].filter((a) => a <= etu.annee);
+  const ens = estEns(u);
+  // Plan du PDF exporté par la version locale (une page par compétence, puis ses traces).
+  const plan = [["Couverture", 1], ["Sommaire", 1], ["Présentation", 1]];
+  annees.forEach((a) => {
+    compsAnnee(a, etu.parcours).forEach((c) => {
+      const n = tracesDe(etu.id, a, c.code).length;
+      plan.push([`BUT${a} · ${c.code} ${c.court}${n ? ` + ${n} trace${n > 1 ? "s" : ""}` : ""}`, 1 + n]);
+    });
+    plan.push([`BUT${a} · Rendez-vous de suivi et notes finales`, 1]);
+  });
+  return `<div class="stack">
+    <section class="card"><h2>Export en un seul PDF <small>disponible dans la version locale</small></h2>
+      <p class="sub" style="margin:0 0 10px">Le bouton « Télécharger le portfolio (PDF) » assemble la présentation, les argumentaires, les évaluations publiées et toutes les traces, dans l'ordre des compétences, avec un sommaire paginé.</p>
+      <details><summary>Voir le plan du PDF de ${esc(etu.prenom)} (au moins ${plan.reduce((s, p) => s + p[1], 0)} pages)</summary>
+        <ol class="ac" style="margin-top:8px">${plan.map(([t]) => `<li>${esc(t)}</li>`).join("")}</ol></details>
+    </section>
+    <section class="card"><h2 style="font-size:20px;display:block">${esc(etu.prenom + " " + etu.nom)}</h2><div class="sub">BUT${etu.annee} GEA · parcours ${parcoursDe(etu.parcours)} · ${etu.groupe}</div>
+      ${p ? `<div class="two" style="margin-top:14px"><p class="prose">${esc(p.texte)}</p><div><h3 style="font-size:15px;margin-bottom:4px">Projet professionnel</h3><p class="prose">${esc(p.projet)}</p></div></div>` : `<p class="empty" style="margin-top:12px">Présentation non renseignée.</p>`}
+    </section>
+    ${annees.map((a) => {
+      const enAttente = compsAnnee(a, etu.parcours).filter((c) => { const ev = S.evals[k(etu.id, a, c.code)]; return nonPublie(ev) && ev.note !== null && ev.note !== undefined; }).length + RDV.filter((d) => rdvNonPublie(rdvDe(etu.id, a, d.n))).length;
+      return `<section class="full-year"><div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:6px"><h2 style="font-size:18px">BUT${a}</h2>
+        ${ens ? `<span class="row">${enAttente ? `<button class="btn btn-primary" data-act="publier-annee" data-annee-pub="${a}">${enAttente > 1 ? `Publier les ${enAttente} notes en brouillon` : "Publier la note en brouillon"}</button>` : `<button class="btn" disabled>Tout est publié</button>`}${ui.flash.pub?.annee === a ? `<span class="msg-ok" role="status">${esc(ui.flash.pub.m)}</span>` : ""}</span>` : ""}</div>
+      ${compsAnnee(a, etu.parcours).map((c) => {
+        const cle = k(etu.id, a, c.code), arg = S.args[cle], ev = S.evals[cle], tr = tracesDe(etu.id, a, c.code);
+        return `<article class="card full-item"><header><div><div class="eyebrow" style="color:${cvar(c.code)}">${c.code} · Niveau ${niveauNum(c, a)} — ${esc(c.niveaux[a][0])}</div><h3>${esc(c.intitule)}</h3></div>
+          <span class="row" style="gap:6px">${ens && nonPublie(ev) ? `<span class="pill ev-non_evalue" style="border-style:dashed">Brouillon : ${esc(libEval(ev.niveau))}${ev.note !== null && ev.note !== undefined ? ` · ${fmtNote(ev.note)}` : ""}</span>` : ""}${pill(ev?.pub?.niveau || "non_evalue", ev?.pub?.note)}</span></header>
+          ${arg?.texte ? `<p class="prose">${esc(arg.texte)}</p>` : `<p class="empty">Aucun argumentaire.</p>`}
+          <div class="eyebrow" style="color:var(--muted);margin:12px 0 4px">Traces</div>
+          ${tr.length ? `<ul class="ac">${tr.map((t) => `<li><strong>${esc(t.titre)}</strong>${t.desc ? ` <span class="sub">— ${esc(t.desc)}</span>` : ""}</li>`).join("")}</ul>` : `<p class="empty">Aucune trace.</p>`}
+          ${ev?.pub?.com ? `<div class="comment"><strong>Commentaire de l'enseignant·e :</strong> ${esc(ev.pub.com)}</div>` : ""}
+        </article>`;
+      }).join("")}
+      <h3 style="font-size:14px;margin:4px 0 0">Rendez-vous de suivi et notes finales · BUT${a}</h3>${synthese(etu, a, true)}</section>`;
+    }).join("")}
+    ${ens ? `<section class="card"><h2>Journal complet des dépôts et modifications</h2>${feed(S.journal.filter((j) => j.etu === etu.id).sort((x, y) => y.at.localeCompare(x.at)))}</section>` : ""}
+  </div>`;
+}
+
+function feed(entrees, { sansComp = false, avecEtu = false } = {}) {
+  if (!entrees.length) return `<p class="empty">Aucune activité.</p>`;
+  return `<ul class="feed">${entrees.map((e) => {
+    const parEns = estEns(user(e.acteur));
+    const couleur = parEns ? "var(--accent)" : e.comp ? cvar(e.comp) : "var(--muted)";
+    return `<li><span class="dot" style="background:${couleur}"></span><div>
+      <div><strong>${esc(avecEtu && !parEns ? nom(e.etu) : nom(e.acteur))}</strong> ${LIB_JOURNAL[e.type] || e.type}${!sansComp && e.comp ? ` <span class="sub">· ${e.comp} BUT${e.annee}</span>` : ""}${avecEtu && parEns ? ` <span class="sub">· ${esc(nom(e.etu))}</span>` : ""}</div>
+      <div class="when">${e.detail ? esc(e.detail) + " · " : ""}${rel(e.at)}</div></div></li>`;
+  }).join("")}</ul>`;
+}
+
+function vueTableau(u) {
+  const promo = ui.promo, comps = compsAnnee(promo, "GEMA"); // codes communs ; intitulés de C4-C5 selon le parcours
+  const admin = u.role === "admin";
+  const filtre = admin ? ui.refFiltre || "" : u.id;
+  const visible = (x) => x.role === "etudiant" && estActif(x) && (!filtre || (filtre === "aucun" ? !referentDe(x.id) : referentDe(x.id) === filtre));
+  const etus = USERS.filter((x) => visible(x) && x.annee === promo);
+  const enseignants = USERS.filter((x) => x.role !== "etudiant" && estActif(x));
+  const cellules = [];
+  const lignes = etus.map((e) => {
+    const vu = S.consult[`${u.id}|${e.id}`];
+    const histo = new Set(S.journal.filter((j) => j.etu === e.id && j.acteur === e.id && j.annee && j.annee < promo).map((j) => j.annee + j.comp)).size;
+    const tds = comps.map((c) => {
+      const cle = k(e.id, promo, c.code), st = etat(e.id, promo, c.code), ev = S.evals[cle], dm = derniereModif(e.id, promo, c.code);
+      const hasArg = !!(S.args[cle]?.texte || "").trim(), n = tracesDe(e.id, promo, c.code).length;
+      const nouveau = dm && (!vu || dm > vu), aRevoir = ev && dm && dm > ev.maj;
+      cellules.push({ st, ev, nouveau, aPublier: nonPublie(ev) });
+      return `<td><button class="cell ${st}" data-ouvrir="${e.id}" data-comp="${c.code}" title="${hasArg ? "argumentaire" : "pas d'argumentaire"} · ${n} trace(s)${dm ? " · modifié " + rel(dm) : ""}">
+        ${nouveau ? `<span class="new" aria-label="Modifié depuis votre dernière visite"></span>` : ""}
+        <span>${st === "vide" ? "—" : `${hasArg ? "Arg." : "∅ arg."} · ${n} PDF`}</span>
+        ${ev && ev.niveau !== "non_evalue" ? pill(ev.niveau, ev.note) : st !== "vide" ? `<span style="font-size:11px">À évaluer</span>` : ""}
+        ${ev && nonPublie(ev) ? `<span class="flag" style="color:var(--muted)">non publiée</span>` : ""}
+        ${aRevoir ? `<span class="flag">modifié après éval.</span>` : ""}</button></td>`;
+    }).join("");
+    return `<tr><td><button class="name-btn" data-ouvrir="${e.id}" data-comp="complet">${esc(e.nom + " " + e.prenom)}</button><div class="sub" style="font-size:12px">${parcoursDe(e.parcours)} · ${e.groupe}${admin ? ` · ${referentDe(e.id) ? esc(nom(referentDe(e.id))) : "sans référent"}` : ""}${histo ? ` · historique complété (${histo})` : ""}</div></td>${tds}${RDV.map((d) => {
+      const r = rdvDe(e.id, promo, d.n);
+      if (rdvNonPublie(r)) cellules.push({ st: "rdv", aPublier: true });
+      return `<td style="text-align:center"><button class="cell" style="min-height:44px;max-width:80px" data-ouvrir="${e.id}" data-comp="suivi"><strong style="color:var(--fg)">${r?.note !== null && r?.note !== undefined ? fmtNote(r.note) : "—"}</strong>${rdvNonPublie(r) ? `<span class="flag" style="color:var(--muted)">non publiée</span>` : ""}</button></td>`;
+    }).join("")}</tr>`;
+  }).join("");
+  const total = cellules.filter((c) => c.st !== "rdv").length; // les rendez-vous ne comptent que dans « brouillons à publier »
+  const activite = S.journal.filter((j) => etus.some((e) => e.id === j.etu)).sort((x, y) => y.at.localeCompare(x.at)).slice(0, 20);
+  const nb = (a) => USERS.filter((x) => visible(x) && x.annee === a).length;
+  const aPublier = cellules.filter((c) => c.aPublier).length;
+  return `
+    <div class="page-head"><div><h1>${admin ? "Suivi des portfolios" : "Mes étudiants"}</h1><div class="sub">${admin ? "Vue administrateur : tous les étudiants" : "Étudiants dont vous êtes l'enseignant·e référent·e"}</div></div>
+      <div class="seg" role="group" aria-label="Promotion">${[1, 2, 3].map((a) => `<button data-promo="${a}" aria-pressed="${a === promo}">BUT${a} <small>(${nb(a)})</small></button>`).join("")}</div></div>
+    ${admin ? `<div class="row" style="margin-bottom:16px;font-size:13.5px"><span class="sub">Référent :</span>
+      ${[["", "Tous"], ...enseignants.map((e) => [e.id, e.prenom + " " + e.nom]), ["aucun", "Sans référent"]].map(([id, n]) => `<button class="seg-chip" data-ref-filtre="${id}" aria-pressed="${filtre === id}">${esc(n)}</button>`).join("")}</div>` : ""}
+    <div class="kpis kpis-5">
+      <div class="kpi"><b>${etus.length}</b><span>étudiants</span></div>
+      <div class="kpi"><b>${cellules.filter((c) => c.st === "complet").length}/${total}</b><span>dépôts complets</span></div>
+      <div class="kpi"><b>${cellules.filter((c) => c.ev?.pub).length}/${total}</b><span>évaluations publiées</span></div>
+      <div class="kpi ${aPublier ? "warn" : ""}"><b>${aPublier}</b><span>brouillons à publier</span></div>
+      <div class="kpi ${cellules.some((c) => c.nouveau) ? "alert" : ""}"><b>${cellules.filter((c) => c.nouveau).length}</b><span>modifiés depuis votre dernière visite</span></div>
+    </div>
+    <div class="grid-main">
+      <section class="card" style="padding:0;overflow:hidden">
+        <div class="table-wrap"><table class="promo"><thead><tr><th>Étudiant·e</th>${comps.map((c) => `<th title="${esc(c.intitule)}"><span class="dot" style="background:${cvar(c.code)};margin-right:6px"></span>${c.code} ${c.tronc ? c.court : "selon parcours"}</th>`).join("")}${RDV.map((d) => `<th title="${d.libelle} (${pct(d.poids)} de chaque note finale)">RDV ${d.n}</th>`).join("")}</tr></thead>
+        <tbody>${lignes || `<tr><td colspan="${comps.length + 1 + RDV.length}" class="empty" style="text-align:center;padding:28px">${admin ? "Aucun étudiant pour ce filtre." : "Aucun étudiant ne vous est affecté dans cette promotion."}</td></tr>`}</tbody></table></div>
+        <div class="legend"><span><i class="sw" style="background:var(--ok-soft)"></i>Argumentaire + trace</span><span><i class="sw" style="background:var(--warn-soft)"></i>Dépôt incomplet</span><span><i class="sw" style="border-style:dashed"></i>Rien déposé</span><span><i class="dot" style="background:var(--new)"></i>Modifié depuis votre dernière visite</span></div>
+      </section>
+      <aside class="card"><h2>Activité récente · BUT${promo}</h2>${feed(activite, { avecEtu: true })}</aside>
+    </div>`;
+}
+
+// ---------- Import des listes d'étudiants (même logique que la version locale) ----------
+const COLONNES_IMPORT = ["Nom", "Prénom", "Email étudiant", "Année", "Parcours", "Enseignant référent", "Email enseignant", "Groupe"];
+const EXEMPLE_IMPORT = [
+  COLONNES_IMPORT,
+  ["Martin", "Alice", "alice.martin@etu.exemple.fr", "BUT1", "GEMA", "Thomas Bernard", "thomas.bernard@exemple.fr", "TD3"],
+  ["Garcia", "Nathan", "nathan.garcia@etu.exemple.fr", "3", "GEMA", "", "sophie.lambert@exemple.fr", ""],
+  ["Leroy", "Emma", "emma.leroy@etu.exemple.fr", "2", "GC2F", "DURAND Paul", "paul.durand@exemple.fr", ""],
+  ["Roux", "Chloé", "chloe.roux2@etu.exemple.fr", "2", "GEMA", "Thomas Bernard", "", ""],
+  ["Petit", "Yanis", "pas-un-mail", "2", "GEMA", "Thomas Bernard", "", ""],
+  ["Moreau", "Hugo", "lea.dubois@etu.exemple.fr", "1", "GEMA", "Thomas Bernard", "", ""],
+];
+const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9@.]+/g, " ").trim();
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ENTETES = {
+  nom: "nom", "nom de famille": "nom", prenom: "prenom", annee: "annee", "annee but": "annee", niveau: "annee", parcours: "parcours",
+  "enseignant referent": "referent", "enseignant e referent e": "referent", referent: "referent", "referent e": "referent", enseignant: "referent", tuteur: "referent",
+  email: "email", "e mail": "email", mail: "email", courriel: "email", "email etudiant": "email", "e mail etudiant": "email", "mail etudiant": "email", "courriel etudiant": "email", "email etudiant e": "email",
+  "email enseignant": "emailRef", "e mail enseignant": "emailRef", "mail enseignant": "emailRef", "courriel enseignant": "emailRef", "email enseignant referent": "emailRef", "email referent": "emailRef", "email enseignant e": "emailRef",
+  groupe: "groupe",
+};
+function lireTableau(tableau) {
+  const iEntete = tableau.findIndex((l) => (l || []).some((c) => ENTETES[norm(c)]));
+  if (iEntete < 0) return { erreur: "Ligne d'en-tête introuvable : la première ligne doit contenir Nom, Prénom, Email étudiant, Année…" };
+  const cols = tableau[iEntete].map((c) => ENTETES[norm(c)]);
+  const manque = ["nom", "prenom", "annee"].filter((c) => !cols.includes(c));
+  if (manque.length) return { erreur: `Colonne(s) obligatoire(s) manquante(s) : ${manque.join(", ")}.` };
+  const lignes = [];
+  for (let i = iEntete + 1; i < tableau.length; i++) {
+    const cel = tableau[i] || [];
+    if (cel.every((c) => !String(c ?? "").trim())) continue;
+    const l = { numero: i + 1 };
+    cols.forEach((ch, j) => { const v = String(cel[j] ?? "").trim(); if (ch && v) l[ch] = v; });
+    lignes.push(l);
+  }
+  return lignes.length ? { lignes } : { erreur: "Le fichier ne contient aucun étudiant sous la ligne d'en-tête." };
+}
+function decouperNom(t) {
+  if (t.includes(",")) { const [nom, prenom] = t.split(",").map((s) => s.trim()); return { prenom: prenom || "-", nom }; }
+  const m = t.split(/\s+/), maj = m.filter((x) => x.length > 1 && x === x.toUpperCase() && /[A-Z]/.test(x));
+  if (maj.length && maj.length < m.length) return { nom: maj.join(" "), prenom: m.filter((x) => !maj.includes(x)).join(" ") };
+  return { prenom: m[0], nom: m.slice(1).join(" ") || m[0] };
+}
+function analyserImport(lignes, creerEns) {
+  // Les étudiants désactivés sont reconnus aussi : un étudiant qui revient est réactivé, pas recréé.
+  const ens = USERS.filter((x) => x.role !== "etudiant" && estActif(x)), etus = USERS.filter((x) => x.role === "etudiant");
+  const cleNom = (p, n) => norm(p + " " + n);
+  const vus = new Map(), mailsVus = new Map(), aCreer = new Map();
+  return lignes.map((l) => {
+    const nom = l.nom || "", prenom = l.prenom || "", email = (l.email || "").toLowerCase(), emailRef = (l.emailRef || "").toLowerCase();
+    const erreurs = [], avert = [];
+    if (!nom || !prenom) erreurs.push("Nom ou prénom manquant.");
+    const annee = Number((l.annee || "").match(/[123]/)?.[0]) || null;
+    if (!annee) erreurs.push(`Année « ${l.annee || ""} » non reconnue (1, 2, 3 ou BUT1…BUT3).`);
+    const parcours = (l.parcours || "").toUpperCase().replace(/\s+/g, "") || "GEMA";
+    if (!l.parcours) avert.push("Parcours absent : GEMA retenu.");
+    else if (!PARCOURS_GEA.includes(parcours)) erreurs.push(`Parcours « ${l.parcours} » inconnu (${PARCOURS_GEA.join(", ")}).`);
+    else if (parcours !== "GEMA") avert.push(`Seul le référentiel GEMA est configuré : onglets GEMA affichés pour ${parcours}.`);
+    const cle = cleNom(prenom, nom);
+    if (vus.has(cle)) erreurs.push(`Doublon de la ligne ${vus.get(cle)}.`); else vus.set(cle, l.numero);
+    const emailValide = EMAIL_OK.test(email);
+    if (!email) avert.push("Email étudiant absent : pas de notification par courriel.");
+    else if (!emailValide) erreurs.push(`Email étudiant « ${l.email} » invalide.`);
+    else if (mailsVus.has(email)) erreurs.push(`Email déjà utilisé ligne ${mailsVus.get(email)}.`); else mailsVus.set(email, l.numero);
+    if (emailRef && !EMAIL_OK.test(emailRef)) erreurs.push(`Email enseignant « ${l.emailRef} » invalide.`);
+    // Référent : l'email est prioritaire sur le nom.
+    let referentId = null, referentNom = "", aCreerRef = null, completerMailRef = null;
+    const refTexte = l.referent || "", refIndique = !!(refTexte || emailRef);
+    if (refIndique) {
+      let trouve = EMAIL_OK.test(emailRef) ? ens.find((e) => norm(e.email) === norm(emailRef)) : null;
+      if (!trouve && refTexte) {
+        const t = norm(refTexte), exact = ens.filter((e) => t === cleNom(e.prenom, e.nom) || t === cleNom(e.nom, e.prenom));
+        const parNom = ens.filter((e) => norm(e.nom) === t);
+        trouve = exact.length === 1 ? exact[0] : exact.length > 1 || parNom.length > 1 ? "ambigu" : parNom[0] || null;
+      }
+      if (trouve === "ambigu") erreurs.push(`Référent « ${refTexte} » ambigu : indiquez son email.`);
+      else if (trouve) {
+        referentId = trouve.id; referentNom = trouve.prenom + " " + trouve.nom;
+        if (emailRef && norm(trouve.email || "") !== norm(emailRef)) {
+          if (!trouve.email) completerMailRef = emailRef; else avert.push(`Email enseignant différent de celui enregistré (${trouve.email}) : conservé.`);
+        }
+      } else if (!refTexte) erreurs.push(`Aucun enseignant avec l'email ${emailRef} : indiquez aussi son nom.`);
+      else if (creerEns) {
+        const c = emailRef || norm(refTexte);
+        aCreerRef = aCreer.get(c) || { ...decouperNom(refTexte), email: emailRef };
+        aCreer.set(c, aCreerRef); referentNom = aCreerRef.prenom + " " + aCreerRef.nom;
+        avert.push(`Enseignant « ${referentNom} » inconnu : il sera créé${emailRef ? "" : " sans email"}.`);
+      } else erreurs.push(`Référent « ${refTexte} » inconnu : ajoutez-le ou cochez « créer les enseignants inconnus ».`);
+    }
+    // Étudiant existant : par email (si le nom correspond), sinon par nom.
+    let parEmail = emailValide ? etus.find((e) => norm(e.email || "") === email) : null;
+    if (parEmail && cleNom(parEmail.prenom, parEmail.nom) !== cle) { erreurs.push(`L'adresse ${email} appartient à ${parEmail.prenom} ${parEmail.nom}.`); parEmail = null; }
+    const homonymes = etus.filter((e) => cleNom(e.prenom, e.nom) === cle);
+    const existant = parEmail || (homonymes.length === 1 ? homonymes[0] : null);
+    if (!parEmail && homonymes.length > 1) erreurs.push("Plusieurs étudiants portent ce nom : renseignez l'email étudiant.");
+    if (emailValide && !erreurs.some((e) => e.startsWith(`L'adresse ${email}`)) && USERS.some((u) => norm(u.email || "") === email && u.id !== existant?.id)) erreurs.push(`L'adresse ${email} appartient déjà à un autre compte.`);
+    const changements = [];
+    let action = "creer", nouvelEmail = null;
+    if (existant) {
+      if (annee && existant.annee !== annee) changements.push(`BUT${existant.annee} → BUT${annee}`);
+      if ((existant.parcours || "GEMA") !== parcours) changements.push(`parcours → ${parcours}`);
+      if (refIndique && (aCreerRef || referentDe(existant.id) !== referentId)) changements.push(`référent → ${referentNom}`);
+      if (emailValide && norm(existant.email || "") !== email) { nouvelEmail = email; changements.push(existant.email ? `email → ${email}` : "email ajouté"); }
+      if (completerMailRef) changements.push("email du référent ajouté");
+      if (!estActif(existant)) changements.push("compte désactivé réactivé");
+      action = changements.length ? "maj" : "inchange";
+    } else {
+      nouvelEmail = emailValide ? email : null;
+      if (!refIndique) avert.push("Aucun référent : visible uniquement par l'administrateur.");
+    }
+    if (erreurs.length) action = "erreur";
+    return { numero: l.numero, nom, prenom, annee, parcours, email, emailRef, groupe: l.groupe || "", refTexte, referentId, referentNom, aCreerRef, completerMailRef, etudiantId: existant?.id || null, nouvelEmail, action, changements, erreurs, avert };
+  });
+}
+function appliquerImport(apercu) {
+  const crees = new Map(), bilan = { crees: 0, maj: 0, inchanges: 0, ignores: 0, ens: 0 };
+  for (const l of apercu) {
+    if (l.action === "erreur") { bilan.ignores++; continue; }
+    if (l.action === "inchange") { bilan.inchanges++; continue; }
+    let refId = l.referentId;
+    if (l.aCreerRef) {
+      const c = l.aCreerRef.email || norm(l.aCreerRef.prenom + " " + l.aCreerRef.nom);
+      refId = crees.get(c);
+      if (!refId) { refId = "ens-" + seq++; USERS.push({ id: refId, role: "enseignant", prenom: l.aCreerRef.prenom, nom: l.aCreerRef.nom, email: l.aCreerRef.email }); crees.set(c, refId); bilan.ens++; }
+    }
+    if (refId && l.completerMailRef) user(refId).email = l.completerMailRef;
+    if (l.action === "creer") {
+      const id = "etu-" + seq++;
+      USERS.push({ id, role: "etudiant", nom: l.nom, prenom: l.prenom, email: l.nouvelEmail || "", annee: l.annee, parcours: l.parcours, groupe: l.groupe });
+      if (refId) S.referents[id] = refId;
+      bilan.crees++;
+    } else {
+      const e = user(l.etudiantId);
+      e.annee = l.annee; e.parcours = l.parcours; e.actif = true;
+      if (l.nouvelEmail) e.email = l.nouvelEmail;
+      if (l.refTexte || l.emailRef) { if (refId) S.referents[e.id] = refId; else delete S.referents[e.id]; }
+      bilan.maj++;
+    }
+  }
+  return bilan;
+}
+async function lireFichierImport(fichier) {
+  if (/\.csv$/i.test(fichier.name)) {
+    const texte = (await fichier.text()).replace(/^﻿/, "");
+    const sep = (texte.split("\n")[0].match(/;/g) || []).length >= (texte.split("\n")[0].match(/,/g) || []).length ? ";" : ",";
+    return lireTableau(texte.split(/\r?\n/).map((l) => l.split(sep).map((c) => c.trim().replace(/^"(.*)"$/, "$1"))));
+  }
+  if (!/\.xlsx?$/i.test(fichier.name)) return { erreur: "Format non pris en charge : utilisez un fichier .xlsx (Excel) ou .csv." };
+  if (!window.XLSX) return { erreur: "La lecture des fichiers Excel n'a pas pu être chargée : réessayez, ou enregistrez la liste en .csv." };
+  try {
+    const classeur = XLSX.read(await fichier.arrayBuffer(), { type: "array" });
+    const feuille = classeur.Sheets[classeur.SheetNames[0]];
+    return lireTableau(XLSX.utils.sheet_to_json(feuille, { header: 1, raw: false, defval: "" }));
+  } catch (e) { return { erreur: "Le fichier Excel est illisible. Enregistrez-le au format .xlsx puis réessayez." }; }
+}
+
+const LIB_ACTION = { creer: ["Nouveau", "var(--ok-soft)", "var(--ok)"], maj: ["Mis à jour", "var(--info-soft)", "var(--info)"], inchange: ["Inchangé", "var(--sunk)", "var(--muted)"], erreur: ["Erreur", "var(--bad-soft)", "var(--bad)"] };
+function blocImport() {
+  const imp = ui.import || {};
+  const ap = imp.apercu, nb = (a) => ap ? ap.filter((l) => l.action === a).length : 0;
+  const tag = (a) => `<span class="pill" style="background:${LIB_ACTION[a][1]};color:${LIB_ACTION[a][2]}">${LIB_ACTION[a][0]}${ap ? " : " + nb(a) : ""}</span>`;
+  return `<section class="card"><h2>Importer une liste d'étudiants</h2>
+    <p class="sub" style="margin:0 0 10px">Colonnes : <strong>${COLONNES_IMPORT.slice(0, 7).join(", ")}</strong> (Groupe facultatif). Les adresses servent aux notifications ; l'email enseignant identifie le référent sans ambiguïté. Un aperçu précède toute modification.</p>
+    <div class="table-wrap" style="margin-bottom:12px"><table class="assign" style="font-size:12.5px"><tbody><tr>${COLONNES_IMPORT.map((c) => `<td style="padding:6px 8px;background:var(--sunk);font-weight:600">${c}</td>`).join("")}</tr>
+      <tr>${EXEMPLE_IMPORT[1].map((c) => `<td style="padding:6px 8px">${esc(c)}</td>`).join("")}</tr></tbody></table></div>
+    <div class="row">
+      <label class="btn" for="import-fichier" style="cursor:pointer">Choisir un fichier .xlsx ou .csv</label>
+      <input id="import-fichier" type="file" accept=".xlsx,.xls,.csv" hidden>
+      <button class="btn" data-act="import-exemple">Essayer avec une liste d'exemple</button>
+      <label style="font-size:13.5px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="import-creer" ${imp.creerEns ? "checked" : ""}> Créer les enseignants référents inconnus</label>
+    </div>
+    ${imp.erreur ? `<p class="msg-err" role="status">${esc(imp.erreur)}</p>` : ""}
+    ${imp.bilan ? `<div class="notice" role="status" style="background:var(--ok-soft);color:var(--ok);margin-top:12px"><strong>Import terminé.</strong> ${imp.bilan.crees} créé·e(s), ${imp.bilan.maj} mis·e(s) à jour, ${imp.bilan.inchanges} inchangé·e(s)${imp.bilan.ens ? `, ${imp.bilan.ens} enseignant·e(s) créé·e(s)` : ""}${imp.bilan.ignores ? `, ${imp.bilan.ignores} ligne(s) en erreur ignorée(s)` : ""}.</div>` : ""}
+    ${ap ? `<div style="margin-top:14px" class="stack">
+      <div class="row" style="justify-content:space-between"><span class="row" style="gap:6px"><span class="sub">${esc(imp.nomFichier)} :</span>${["creer", "maj", "inchange", "erreur"].map(tag).join("")}</span>
+        <button class="btn btn-primary" data-act="import-appliquer" ${nb("creer") + nb("maj") ? "" : "disabled"}>Importer ${nb("creer") + nb("maj")} ligne${nb("creer") + nb("maj") > 1 ? "s" : ""}</button></div>
+      <div class="table-wrap" style="max-height:420px;border:1px solid var(--line);border-radius:10px"><table class="promo" style="min-width:720px"><thead><tr><th>Ligne</th><th>Étudiant·e</th><th>Année</th><th>Parcours</th><th>Référent</th><th>Résultat</th></tr></thead><tbody>
+        ${ap.map((l) => `<tr><td class="sub">${l.numero}</td><td><strong>${esc(l.nom + " " + l.prenom)}</strong><div class="sub" style="font-size:12px">${esc(l.email || "sans email")}</div></td>
+          <td style="text-align:center">${l.annee ? "BUT" + l.annee : "?"}</td><td style="text-align:center">${esc(l.parcours)}</td>
+          <td>${esc(l.referentNom || l.refTexte || "—")}${l.emailRef ? `<div class="sub" style="font-size:12px">${esc(l.emailRef)}</div>` : ""}</td>
+          <td>${tag(l.action).replace(/ : \d+/, "")}${l.action !== "erreur" && l.changements.length ? `<div class="sub" style="font-size:12px">${esc(l.changements.join(" · "))}</div>` : ""}
+            ${l.erreurs.map((e) => `<div class="msg-err" style="font-size:12px">${esc(e)}</div>`).join("")}${l.avert.map((a) => `<div class="msg-warn">${esc(a)}</div>`).join("")}</td></tr>`).join("")}
+      </tbody></table></div></div>` : ""}
+  </section>`;
+}
+
+function vueAffectations() {
+  const enseignants = USERS.filter((x) => x.role !== "etudiant" && estActif(x));
+  const etus = USERS.filter((x) => x.role === "etudiant" && estActif(x));
+  const desactives = USERS.filter((x) => !estActif(x));
+  const compte = (id) => etus.filter((e) => referentDe(e.id) === id).length;
+  const sans = etus.filter((e) => !referentDe(e.id)).length;
+  const fA = ui.flash.ajout;
+  const enAttente = S.courriels.filter((c) => c.statut === "en_attente");
+  return `
+    <div class="page-head"><div><h1>Étudiants et affectations</h1><div class="sub">Importez les listes, ajoutez des comptes et affectez chaque étudiant·e à son enseignant·e référent·e, seul·e (avec l'administrateur) à voir et évaluer son portfolio.</div>
+      <div class="sub" style="font-size:12px;margin-top:4px">Courriels en attente d'envoi : ${enAttente.filter((c) => c.mode === "immediat").length} immédiat(s), ${enAttente.filter((c) => c.mode === "quotidien").length} pour le récapitulatif quotidien.</div></div>
+      <button class="btn btn-primary" data-act="passage">Passage d'année et réaffectations groupées</button></div>
+    <div class="stack" style="margin-bottom:22px">
+      ${blocImport()}
+      <div class="two" style="gap:18px">
+        <section class="card"><h2>Ajouter un·e étudiant·e</h2><form class="form" data-form="ajout-etu">
+          <div class="two"><input class="input" id="ae-nom" name="nom" placeholder="Nom *" aria-label="Nom" required><input class="input" id="ae-prenom" name="prenom" placeholder="Prénom *" aria-label="Prénom" required>
+          <select class="input" id="ae-annee" name="annee" aria-label="Année" required><option value="">Année *</option><option value="1">BUT1</option><option value="2">BUT2</option><option value="3">BUT3</option></select>
+          <select class="input" id="ae-parcours" name="parcours" aria-label="Parcours">${PARCOURS_GEA.map((p) => `<option>${p}</option>`).join("")}</select>
+          <select class="input" id="ae-ref" name="referent" aria-label="Référent"><option value="">Sans référent</option>${enseignants.map((e) => `<option value="${e.id}">Référent : ${esc(e.prenom + " " + e.nom)}</option>`).join("")}</select>
+          <input class="input" id="ae-groupe" name="groupe" placeholder="Groupe (facultatif)" aria-label="Groupe"></div>
+          <input class="input" id="ae-email" name="email" type="email" placeholder="Email étudiant (pour les notifications)" aria-label="Email étudiant">
+          <div class="row"><button class="btn btn-primary">Ajouter l'étudiant·e</button>${fA?.cible === "etu" ? `<span class="${fA.ok ? "msg-ok" : "msg-err"}" role="status">${esc(fA.m)}</span>` : ""}</div></form></section>
+        <section class="card"><h2>Ajouter un·e enseignant·e</h2><form class="form" data-form="ajout-ens">
+          <div class="two"><input class="input" id="an-nom" name="nom" placeholder="Nom *" aria-label="Nom" required><input class="input" id="an-prenom" name="prenom" placeholder="Prénom *" aria-label="Prénom" required></div>
+          <input class="input" id="an-email" name="email" type="email" placeholder="Email enseignant (pour les notifications)" aria-label="Email enseignant">
+          <label style="font-size:13.5px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="an-admin" name="admin" value="1"> Droits d'administrateur</label>
+          <div class="row"><button class="btn btn-primary">Ajouter l'enseignant·e</button>${fA?.cible === "ens" ? `<span class="${fA.ok ? "msg-ok" : "msg-err"}" role="status">${esc(fA.m)}</span>` : ""}</div></form></section>
+      </div>
+    </div>
+    <h2 style="font-size:18px;margin-bottom:4px">Affectations</h2>
+    <p class="sub" style="font-size:12.5px;margin:0 0 10px">Cliquez sur un nom (enseignant ou étudiant) pour modifier, désactiver ou supprimer le compte.</p>
+    <div class="row" style="margin-bottom:16px;font-size:13.5px">${enseignants.map((e) => `<button class="seg-chip" data-fiche="${e.id}">${esc(e.prenom + " " + e.nom)}${e.role === "admin" ? " (admin)" : ""} · <strong>${compte(e.id)}</strong></button>`).join("")}
+      <span class="seg-chip" style="${sans ? "background:var(--warn-soft);color:var(--warn)" : ""}">Sans référent · <strong>${sans}</strong></span></div>
+    <div class="stack">${[1, 2, 3].map((a) => `<section class="card" style="padding:0;overflow:hidden"><h2 style="padding:14px 16px 0">BUT${a}</h2><div class="table-wrap"><table class="assign"><tbody>
+      ${etus.filter((e) => e.annee === a).map((e) => `<tr><td><button class="name-btn" data-fiche="${e.id}">${esc(e.nom + " " + e.prenom)}</button><div class="sub" style="font-size:12px">${esc([e.parcours, e.groupe, e.email || "email à renseigner"].filter(Boolean).join(" · "))}</div></td>
+        <td style="text-align:right"><label class="sub" for="ref-${e.id}" style="font-size:12px;margin-right:6px">Référent</label><select id="ref-${e.id}" data-affecter="${e.id}">
+          <option value="">Sans référent</option>${enseignants.map((ens) => `<option value="${ens.id}" ${referentDe(e.id) === ens.id ? "selected" : ""}>${esc(ens.prenom + " " + ens.nom)}</option>`).join("")}</select></td></tr>`).join("")}
+    </tbody></table></div></section>`).join("")}</div>
+    ${desactives.length ? `<h2 style="font-size:18px;margin:24px 0 4px">Comptes désactivés (${desactives.length})</h2><p class="sub" style="font-size:12.5px;margin:0 0 10px">Plus d'accès à l'outil ; portfolios et historique conservés.</p>
+      <ul class="card notif-list">${desactives.map((d) => `<li><button class="notif" data-fiche="${d.id}"><span style="flex:1"><strong>${esc(d.nom + " " + d.prenom)}</strong> <span class="sub">· ${d.role === "etudiant" ? `étudiant·e, BUT${d.annee}` : "enseignant·e"}</span></span><span class="when">Réactiver ou supprimer</span></button></li>`).join("")}</ul>` : ""}`;
+}
+
+// ---------- Fiche d'un compte (administrateur) ----------
+function historique(id) {
+  return {
+    args: Object.keys(S.args).filter((k2) => k2.startsWith(id + "|")).length,
+    traces: S.traces.filter((t) => t.etu === id).length,
+    evalsRecues: Object.keys(S.evals).filter((k2) => k2.startsWith(id + "|")).length,
+    evalsDonnees: Object.values(S.evals).filter((e) => e.ens === id).length,
+    actions: S.journal.filter((j) => j.acteur === id).length,
+    suivis: Object.values(S.referents).filter((r) => r === id).length,
+  };
+}
+function vueFiche() {
+  const c = user(ui.ficheId);
+  if (!c) { ui.vue = "affectations"; return vueAffectations(); }
+  const etu = c.role === "etudiant", h = historique(c.id), moi = c.id === ui.user;
+  const enseignants = USERS.filter((x) => x.role !== "etudiant" && estActif(x));
+  const resume = etu ? `${h.args} argumentaire(s), ${h.traces} trace(s), ${h.evalsRecues} évaluation(s)` : `${h.evalsDonnees} évaluation(s), ${h.actions} action(s), ${h.suivis} étudiant(s) suivi(s)`;
+  const f = ui.flash.fiche;
+  const msg = (cle) => f?.cle === cle ? `<span class="${f.ok ? "msg-ok" : "msg-err"}" role="status">${esc(f.m)}</span>` : "";
+  return `<button class="btn-link back" data-act="affectations">← Étudiants et affectations</button>
+    <div class="page-head"><div><h1>${esc(c.prenom + " " + c.nom)}</h1><div class="sub">${etu ? `Étudiant·e · BUT${c.annee}` : c.role === "admin" ? "Enseignant·e administrateur" : "Enseignant·e"} · ${resume}</div></div>
+      <span class="row">${!estActif(c) ? `<span class="pill ev-non_evalue">Compte désactivé</span>` : ""}${etu ? `<button class="btn" data-ouvrir="${c.id}" data-comp="complet">Voir le portfolio</button>` : ""}</span></div>
+    <div class="stack" style="max-width:760px">
+      <section class="card"><h2>Informations</h2><form class="form" data-form="fiche">
+        <div class="two"><label class="field">Nom<input class="input" id="fi-nom" name="nom" value="${esc(c.nom)}" required></label><label class="field">Prénom<input class="input" id="fi-prenom" name="prenom" value="${esc(c.prenom)}" required></label></div>
+        <label class="field">Adresse mail (notifications)<input class="input" id="fi-email" name="email" type="email" value="${esc(c.email || "")}" required></label>
+        ${etu ? `<div class="two">
+          <label class="field">Année<select class="input" id="fi-annee" name="annee">${[1, 2, 3].map((a) => `<option value="${a}" ${c.annee === a ? "selected" : ""}>BUT${a}</option>`).join("")}</select></label>
+          <label class="field">Parcours<select class="input" id="fi-parcours" name="parcours">${PARCOURS_GEA.map((p) => `<option ${(c.parcours || "GEMA") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>
+          <label class="field">Référent<select class="input" id="fi-ref" name="referent"><option value="">Sans référent</option>${enseignants.map((e) => `<option value="${e.id}" ${referentDe(c.id) === e.id ? "selected" : ""}>${esc(e.prenom + " " + e.nom)}</option>`).join("")}</select></label>
+          <label class="field">Groupe<input class="input" id="fi-groupe" name="groupe" value="${esc(c.groupe || "")}"></label></div>`
+        : `<label style="font-size:14px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="fi-admin" name="admin" value="1" ${c.role === "admin" ? "checked" : ""}> Droits d'administrateur</label>`}
+        <div class="row"><button class="btn btn-primary">Enregistrer les modifications</button>${msg("infos")}</div></form></section>
+      ${moi ? "" : `<section class="card"><h2>${estActif(c) ? "Désactiver" : "Réactiver"}</h2>
+        <p class="sub" style="margin:0 0 10px">${estActif(c) ? (etu ? "Sortie de formation (abandon, réorientation, diplôme) : plus d'accès, portfolio conservé et exportable." : "Départ : plus d'accès, évaluations conservées dans l'historique, étudiants suivis passés sans référent.") : "La réactivation rend l'accès à l'outil."}</p>
+        <div class="row"><button class="btn" data-act="basculer-actif">${estActif(c) ? "Désactiver le compte" : "Réactiver le compte"}</button>${msg("actif")}</div></section>
+      <section class="card" style="border-color:color-mix(in srgb, var(--bad) 35%, transparent)"><h2 style="color:var(--bad)">Supprimer</h2>
+        <p class="sub" style="margin:0 0 10px;color:var(--bad)">${etu ? `Suppression définitive du compte et de tout le portfolio (${resume}). Irréversible.` : `Possible seulement sans évaluation ni action dans l'historique (${resume}).`}</p>
+        <form class="form" data-form="supprimer"><label class="field" style="font-weight:400">Pour confirmer, saisissez le nom <strong>${esc(c.nom)}</strong><input class="input" id="fi-confirm" name="confirmation" autocomplete="off"></label>
+        <div class="row"><button class="btn" style="background:var(--bad);color:#fff;border-color:var(--bad)">Supprimer définitivement</button>${msg("suppr")}</div></form></section>`}
+    </div>`;
+}
+
+// ---------- Passage d'année et réaffectations groupés ----------
+function vuePassage() {
+  const p = ui.passage || (ui.passage = { annee: 1, ref: "", sel: [] });
+  const enseignants = USERS.filter((x) => x.role !== "etudiant" && estActif(x));
+  const visibles = USERS.filter((x) => x.role === "etudiant" && estActif(x) && (!p.annee || x.annee === p.annee) && (!p.ref || (p.ref === "__aucun" ? !referentDe(x.id) : referentDe(x.id) === p.ref)));
+  const sel = new Set(p.sel), tous = visibles.length && visibles.every((e) => sel.has(e.id)), n = sel.size;
+  const f = ui.flash.passage;
+  return `<button class="btn-link back" data-act="affectations">← Étudiants et affectations</button>
+    <div class="page-head"><div><h1>Passage d'année et réaffectations</h1><div class="sub">Filtrez, cochez les étudiants, puis choisissez ce qui change (année, parcours à l'entrée en BUT2, référent, groupe). « Inchangé » ne modifie rien ; les portfolios des années précédentes sont conservés.</div></div></div>
+    <form data-form="passage" class="grid-main">
+      <section class="card" style="padding:0;overflow:hidden">
+        <div class="row" style="padding:12px;border-bottom:1px solid var(--line)">
+          <span class="seg">${[0, 1, 2, 3].map((a) => `<button type="button" data-passage-annee="${a}" aria-pressed="${p.annee === a}">${a ? "BUT" + a : "Tous"}</button>`).join("")}</span>
+          <select class="input" id="pa-filtre-ref" style="width:auto" aria-label="Filtrer par référent"><option value="">Tous les référents</option><option value="__aucun" ${p.ref === "__aucun" ? "selected" : ""}>Sans référent</option>${enseignants.map((e) => `<option value="${e.id}" ${p.ref === e.id ? "selected" : ""}>${esc(e.prenom + " " + e.nom)}</option>`).join("")}</select>
+        </div>
+        <div class="table-wrap"><table class="promo"><thead><tr><th style="width:40px"><input type="checkbox" id="pa-tous" ${tous ? "checked" : ""} aria-label="Tout sélectionner"></th><th>Étudiant·e</th><th>Année</th><th>Parcours</th><th>Groupe</th><th>Référent</th></tr></thead><tbody>
+          ${visibles.map((e) => `<tr style="${sel.has(e.id) ? "background:var(--accent-soft)" : ""}"><td><input type="checkbox" data-passage-sel="${e.id}" ${sel.has(e.id) ? "checked" : ""} aria-label="Sélectionner ${esc(e.prenom + " " + e.nom)}"></td>
+            <td><strong>${esc(e.nom + " " + e.prenom)}</strong></td><td style="text-align:center">BUT${e.annee}</td><td style="text-align:center">${esc(e.parcours || "GEMA")}</td><td style="text-align:center">${esc(e.groupe || "—")}</td><td>${referentDe(e.id) ? esc(nom(referentDe(e.id))) : `<span class="msg-warn">aucun</span>`}</td></tr>`).join("") || `<tr><td colspan="6" class="empty" style="text-align:center;padding:24px">Aucun étudiant pour ce filtre.</td></tr>`}
+        </tbody></table></div>
+      </section>
+      <aside class="card stack">
+        <h2 style="margin:0">${n} étudiant${n > 1 ? "s" : ""} sélectionné${n > 1 ? "s" : ""}</h2>
+        <label class="field">Année<select class="input" id="pa-annee" name="annee"><option value="">Inchangée</option><option value="suivante" selected>Année suivante (BUT1 → BUT2, BUT2 → BUT3)</option><option value="1">BUT1</option><option value="2">BUT2</option><option value="3">BUT3</option></select></label>
+        <label class="field">Parcours<select class="input" id="pa-parcours" name="parcours"><option value="">Inchangé</option>${PARCOURS_GEA.map((x) => `<option>${x}</option>`).join("")}</select></label>
+        <label class="field">Référent<select class="input" id="pa-ref" name="referent"><option value="">Inchangé</option><option value="__aucun">Retirer le référent</option>${enseignants.map((e) => `<option value="${e.id}">${esc(e.prenom + " " + e.nom)}</option>`).join("")}</select></label>
+        <label class="field">Groupe<input class="input" id="pa-groupe" name="groupe" placeholder="Laisser vide = inchangé"></label>
+        <button class="btn btn-primary" value="appliquer" ${n ? "" : "disabled"}>Appliquer à ${n} étudiant${n > 1 ? "s" : ""}</button>
+        <p class="sub" style="font-size:12.5px;margin:0">Fin de BUT3, abandon, réorientation : accès fermé, portfolio conservé.</p>
+        <button class="btn" value="desactiver" ${n ? "" : "disabled"}>Désactiver la sélection (sortie de formation)</button>
+        ${f ? `<div class="notice ${f.ok ? "" : "warn"}" role="status" style="${f.ok ? "background:var(--ok-soft);color:var(--ok)" : ""}">${esc(f.m)}</div>` : ""}
+      </aside>
+    </form>`;
+}
+
+// ---------- Mon compte : préférence de notification par courriel ----------
+function vueCompte(u) {
+  const ens = estEns(u), pref = prefDe(u);
+  const choix = [["immediat", "Un courriel à chaque fois", "Au plus un courriel par dépôt tant que la notification précédente n'est pas lue."], ...(ens ? [["quotidien", "Un récapitulatif par jour", "Un seul courriel en fin de journée, avec l'activité de tous vos étudiants."]] : []), ["aucun", "Aucun courriel", "Seulement la cloche dans l'outil."]];
+  const nbSuivis = Object.values(S.referents).filter((r) => r === u.id).length;
+  return `<div class="page-head"><div><h1>Mon compte</h1><div class="sub">${esc(u.prenom + " " + u.nom)} · ${esc(u.email || "adresse à renseigner")}${u.role === "etudiant" ? ` · BUT${u.annee}` : ` · référent·e de ${nbSuivis} étudiant${nbSuivis > 1 ? "s" : ""}`}</div></div></div>
+    <section class="card" style="max-width:720px"><h2>Notifications par courriel</h2>
+      <p class="sub" style="margin:0 0 12px">${ens ? "Vous êtes prévenu·e dans l'outil quand un de vos étudiants dépose ou modifie un argumentaire, une trace ou sa présentation. Voulez-vous aussi un courriel ?" : "Vous êtes prévenu·e dans l'outil quand une évaluation est publiée. Voulez-vous aussi un courriel ?"}</p>
+      <form class="form" data-form="preferences">${choix.map(([v, l, a]) => `<label class="choix"><input type="radio" id="pref-${v}" name="pref" value="${v}" ${pref === v ? "checked" : ""}><span><strong>${l}</strong><span class="sub" style="display:block;font-size:12.5px">${a}</span></span></label>`).join("")}
+        <div class="row"><button class="btn btn-primary">Enregistrer</button>${ui.flash.pref ? `<span class="msg-ok" role="status">${esc(ui.flash.pref)}</span>` : ""}</div></form>
+      <p class="sub" style="font-size:12px;margin:12px 0 0">L'envoi effectif sera activé avec la messagerie de l'université ; votre choix est déjà pris en compte.</p>
+    </section>`;
+}
+
+// Publie les brouillons (évaluations notées, et rendez-vous si toute l'année) ; une évaluation sans note n'est pas publiable.
+function publier(etu, annee, comp, numeroRdv) {
+  const elements = [];
+  let premierLien = null;
+  if (!numeroRdv) compsAnnee(annee, user(etu)?.parcours).filter((c) => !comp || c.code === comp).forEach((c) => {
+    const ev = S.evals[k(etu, annee, c.code)];
+    if (nonPublie(ev) && ev.note !== null && ev.note !== undefined) {
+      ev.pub = { niveau: ev.niveau, note: ev.note, com: ev.com, at: now() };
+      elements.push(`${c.code} : ${libEval(ev.niveau)} (${fmtNote(ev.note)})`); premierLien = premierLien || { onglet: c.code, titre: `Évaluation publiée : ${c.code} ${c.court} (BUT${annee})` };
+      log(etu, annee, c.code, "evaluation_publiee", `${libEval(ev.niveau)} · ${fmtNote(ev.note)}`);
+    }
+  });
+  if (!comp) RDV.filter((d) => !numeroRdv || d.n === numeroRdv).forEach((d) => {
+    const r = rdvDe(etu, annee, d.n);
+    if (rdvNonPublie(r)) {
+      r.pub = { note: r.note, com: r.com, at: now() };
+      elements.push(`RDV ${d.n} : ${fmtNote(r.note)}`); premierLien = premierLien || { onglet: "suivi", titre: `${d.libelle} : note publiée (BUT${annee})` };
+      log(etu, annee, null, "rendez_vous_publie", `${d.libelle} · ${fmtNote(r.note)}`);
+    }
+  });
+  const n = elements.length;
+  if (n) {
+    // Notification de l'étudiant (dans l'outil, et courriel selon sa préférence).
+    const auteur = user(ui.user);
+    notifierAvecCourriel({
+      dest: etu,
+      titre: n > 1 ? `${n} notes publiées (BUT${annee})` : premierLien.titre,
+      detail: `${elements.join(" · ")} · par ${auteur.prenom} ${auteur.nom}`,
+      annee, onglet: n > 1 ? "suivi" : premierLien.onglet,
+    });
+  }
+  return n;
+}
+
+// ---------- Interactions ----------
+function ouvrirPortfolio(etuId, onglet) {
+  const u = user(ui.user);
+  ui.etu = etuId; ui.annee = user(etuId).annee; ui.onglet = onglet; ui.flash = {}; ui.ouvert = {}; ui.vue = null;
+  if (estEns(u)) { const cle = `${u.id}|${etuId}`; ui.vuAvant = S.consult[cle] || null; S.consult[cle] = now(); }
+  save(); render(); window.scrollTo(0, 0);
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target.id === "compte") {
+    const u = user(e.target.value);
+    ui = { user: u.id, etu: estEns(u) ? null : u.id, annee: u.annee || 1, onglet: "presentation", promo: ui.promo, vuAvant: null, flash: {}, ouvert: {} };
+    save(); render();
+  } else if (e.target.id === "import-fichier" && e.target.files.length) {
+    const fichier = e.target.files[0];
+    lireFichierImport(fichier).then((r) => {
+      const creerEns = !!ui.import?.creerEns;
+      ui.import = r.erreur ? { erreur: r.erreur, creerEns } : { lignes: r.lignes, nomFichier: fichier.name, creerEns, apercu: analyserImport(r.lignes, creerEns) };
+      render();
+    });
+  } else if (e.target.id === "pa-filtre-ref") {
+    ui.passage.ref = e.target.value; render();
+  } else if (e.target.id === "pa-tous" || e.target.dataset.passageSel) {
+    const p = ui.passage, sel = new Set(p.sel);
+    if (e.target.dataset.passageSel) { if (e.target.checked) sel.add(e.target.dataset.passageSel); else sel.delete(e.target.dataset.passageSel); }
+    else document.querySelectorAll("[data-passage-sel]").forEach((cb) => { if (e.target.checked) sel.add(cb.dataset.passageSel); else sel.delete(cb.dataset.passageSel); });
+    p.sel = [...sel]; render();
+  } else if (e.target.id === "import-creer") {
+    ui.import = { ...(ui.import || {}), creerEns: e.target.checked, bilan: null };
+    if (ui.import.lignes) ui.import.apercu = analyserImport(ui.import.lignes, e.target.checked);
+    render();
+  } else if (e.target.dataset.affecter && user(ui.user).role === "admin") {
+    const etuId = e.target.dataset.affecter;
+    if (e.target.value) S.referents[etuId] = e.target.value; else delete S.referents[etuId];
+    save(); render();
+  }
+});
+document.addEventListener("input", (e) => {
+  if (e.target.matches("[data-compteur]")) { const c = $("[data-count]"); if (c) c.textContent = `${mots(e.target.value)} mots`; }
+});
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.onglet) { ui.onglet = b.dataset.onglet; ui.flash = {}; ui.ouvert = {}; save(); render(); return; }
+  if (b.dataset.annee) { ui.annee = +b.dataset.annee; if (!["presentation", "complet", "suivi"].includes(ui.onglet)) ui.onglet = "presentation"; ui.flash = {}; save(); render(); return; }
+  if (b.dataset.promo) { ui.promo = +b.dataset.promo; save(); render(); return; }
+  if (b.dataset.ouvrir) { ouvrirPortfolio(b.dataset.ouvrir, b.dataset.comp); return; }
+  const act = b.dataset.act;
+  if (b.dataset.refFiltre !== undefined) { ui.refFiltre = b.dataset.refFiltre; render(); return; }
+  if (b.dataset.fiche) { ui.vue = "fiche"; ui.ficheId = b.dataset.fiche; ui.flash = {}; render(); window.scrollTo(0, 0); return; }
+  if (b.dataset.passageAnnee !== undefined) { ui.passage.annee = +b.dataset.passageAnnee; render(); return; }
+  if (act === "compte") { ui.vue = "compte"; ui.flash = {}; render(); return; }
+  if (act === "theme") {
+    const nouveau = themeActuel() === "dark" ? "light" : "dark";
+    appliquerTheme(nouveau);
+    try { localStorage.setItem(CLE_THEME, nouveau); } catch (err) {}
+    render(); return;
+  }
+  if (act === "passage") { ui.vue = "passage"; ui.passage = null; ui.flash = {}; render(); return; }
+  if (act === "basculer-actif" && user(ui.user).role === "admin") {
+    const c = user(ui.ficheId);
+    if (!c || c.id === ui.user) return;
+    const activer = !estActif(c);
+    c.actif = activer;
+    let liberes = 0;
+    if (!activer && c.role !== "etudiant") for (const [etu, ref] of Object.entries(S.referents)) if (ref === c.id) { delete S.referents[etu]; liberes++; }
+    ui.flash = { fiche: { cle: "actif", ok: true, m: activer ? "Compte réactivé." : `Compte désactivé : plus d'accès, données conservées.${liberes ? ` ${liberes} étudiant(s) sans référent.` : ""}` } };
+    save(); render(); return;
+  }
+  if (b.dataset.ouvrirNotif) {
+    const n = S.notifs.find((x) => x.id === b.dataset.ouvrirNotif);
+    if (n) { ui.vue = null; ui.etu = n.etu || n.dest; ui.annee = n.annee; ui.onglet = n.onglet; ui.flash = {}; save(); render(); window.scrollTo(0, 0); }
+    return;
+  }
+  if (act === "notifications") { ui.vue = "notifications"; ui.flash = {}; render(); return; }
+  if (act === "portfolio") { ui.vue = null; ui.etu = ui.user; ui.onglet = "presentation"; render(); return; }
+  if (act === "import-exemple") {
+    const r = lireTableau(EXEMPLE_IMPORT), creerEns = !!ui.import?.creerEns;
+    ui.import = { lignes: r.lignes, nomFichier: "liste d'exemple", creerEns, apercu: analyserImport(r.lignes, creerEns) };
+    render(); return;
+  }
+  if (act === "import-appliquer" && user(ui.user).role === "admin" && ui.import?.lignes) {
+    // On ré-analyse au moment d'appliquer : la base a pu changer depuis l'aperçu.
+    const bilan = appliquerImport(analyserImport(ui.import.lignes, ui.import.creerEns));
+    ui.import = { creerEns: ui.import.creerEns, bilan };
+    save(); render(); return;
+  }
+  if (act === "tableau") { ui.promo = ui.etu ? user(ui.etu).annee : ui.promo; ui.etu = null; ui.vue = null; save(); render(); }
+  else if (act === "affectations") { ui.vue = "affectations"; ui.etu = null; ui.flash = {}; render(); }
+  else if (act === "publier-annee") {
+    const a = +b.dataset.anneePub;
+    if (!suit(user(ui.user), ui.etu)) return;
+    const n = publier(ui.etu, a);
+    ui.flash = { pub: { annee: a, m: n ? `${n} évaluation${n > 1 ? "s publiées" : " publiée"}.` : "Aucun brouillon à publier." } };
+    save(); render();
+  }
+  else if (act === "ouvrir") { ui.ouvert[b.dataset.cle] = true; ui.flash = {}; render(); }
+  else if (act === "fermer") { delete ui.ouvert[b.dataset.cle]; render(); }
+  else if (act === "supprimer") {
+    const t = S.traces.find((x) => x.id === b.dataset.trace);
+    if (t && peutModifier(t.etu, t.annee)) { S.traces = S.traces.filter((x) => x !== t); log(t.etu, t.annee, t.comp, "trace_supprimee", t.titre); prevenirReferent(t.etu, t.annee, t.comp, `trace supprimée : ${t.titre}`); }
+    ui.ouvert = {}; save(); render();
+  } else if (act === "reset") {
+    if (!ui.ouvert.reset) { ui.ouvert.reset = true; b.textContent = "Confirmer la réinitialisation"; return; }
+    try { localStorage.removeItem(CLE); sessionStorage.removeItem(CLE + "-ui"); } catch (err) {}
+    D.data = seed(); Object.keys(S).forEach((x) => delete S[x]); Object.assign(S, D.data); D.data = S; USERS = S.users;
+    ui = { user: "etu-fournier", etu: "etu-fournier", annee: 3, onglet: "C4", promo: 2, vuAvant: null, flash: {}, ouvert: {} };
+    save(); render();
+  }
+});
+
+async function lirePdf(input) {
+  const f = input?.files?.[0];
+  if (!f) return "Choisissez un fichier PDF.";
+  if (f.size > 10 * 1024 * 1024) return "Le fichier dépasse 10 Mo.";
+  const debut = await f.slice(0, 5).text();
+  if (debut !== "%PDF-") return "Le fichier doit être un PDF.";
+  return f;
+}
+
+// Affiche une erreur dans le formulaire sans le redessiner, pour ne pas perdre la saisie.
+function erreurFormulaire(form, message) {
+  let s = form.querySelector(".erreur-saisie");
+  if (!s) { s = document.createElement("span"); s.className = "msg-err erreur-saisie"; s.setAttribute("role", "status"); form.appendChild(s); }
+  s.textContent = message;
+}
+
+document.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target, kind = form.dataset.form, fd = new FormData(form);
+  if (kind === "preferences") {
+    const u = user(ui.user), pref = fd.get("pref");
+    if (["immediat", "quotidien", "aucun"].includes(pref) && (estEns(u) || pref !== "quotidien")) u.pref = pref;
+    ui.flash = { pref: pref === "aucun" ? "Plus de courriel : les notifications restent visibles dans l'outil." : "Préférence enregistrée." };
+    save(); render(); return;
+  }
+  if ((kind === "fiche" || kind === "supprimer" || kind === "passage") && user(ui.user).role !== "admin") return;
+  if (kind === "fiche") {
+    const c = user(ui.ficheId), email = fd.get("email").trim().toLowerCase();
+    const autre = USERS.some((x) => x.id !== c.id && norm(x.email || "") === email);
+    if (!EMAIL_OK.test(email) || autre) { ui.flash = { fiche: { cle: "infos", ok: false, m: autre ? `L'adresse ${email} est déjà utilisée.` : "Adresse mail invalide." } }; render(); return; }
+    if (c.id === ui.user && fd.get("admin") !== "1" && c.role === "admin") { ui.flash = { fiche: { cle: "infos", ok: false, m: "Vous ne pouvez pas retirer vos propres droits d'administrateur." } }; render(); return; }
+    c.nom = fd.get("nom").trim(); c.prenom = fd.get("prenom").trim(); c.email = email;
+    if (c.role === "etudiant") {
+      const avant = c.annee;
+      c.annee = +fd.get("annee"); c.parcours = fd.get("parcours"); c.groupe = fd.get("groupe").trim();
+      if (fd.get("referent")) S.referents[c.id] = fd.get("referent"); else delete S.referents[c.id];
+      if (avant !== c.annee) S.journal.push({ id: seq++, etu: c.id, acteur: ui.user, annee: null, comp: null, type: "passage_annee", detail: `BUT${avant} → BUT${c.annee}`, at: now() });
+    } else c.role = fd.get("admin") === "1" ? "admin" : "enseignant";
+    ui.flash = { fiche: { cle: "infos", ok: true, m: "Compte enregistré." } };
+    save(); render(); return;
+  }
+  if (kind === "supprimer") {
+    const c = user(ui.ficheId);
+    if (!c || c.id === ui.user) return;
+    if (norm(fd.get("confirmation")) !== norm(c.nom)) { ui.flash = { fiche: { cle: "suppr", ok: false, m: `Pour confirmer, saisissez le nom « ${c.nom} ».` } }; render(); return; }
+    const h = historique(c.id);
+    if (c.role !== "etudiant" && (h.evalsDonnees || h.actions)) { ui.flash = { fiche: { cle: "suppr", ok: false, m: `Suppression impossible : ${h.evalsDonnees} évaluation(s) et ${h.actions} action(s) dans l'historique. Désactivez plutôt ce compte.` } }; render(); return; }
+    if (c.role === "etudiant") {
+      for (const cle of Object.keys(S.args)) if (cle.startsWith(c.id + "|")) delete S.args[cle];
+      for (const cle of Object.keys(S.evals)) if (cle.startsWith(c.id + "|")) delete S.evals[cle];
+      S.traces = S.traces.filter((t) => t.etu !== c.id); S.journal = S.journal.filter((j) => j.etu !== c.id);
+      S.notifs = S.notifs.filter((n) => n.dest !== c.id && n.etu !== c.id); delete S.pres[c.id]; delete S.referents[c.id];
+    } else for (const [etu, ref] of Object.entries(S.referents)) if (ref === c.id) delete S.referents[etu];
+    USERS.splice(USERS.indexOf(c), 1);
+    ui.vue = "affectations"; ui.flash = {};
+    save(); render(); return;
+  }
+  if (kind === "passage") {
+    const p = ui.passage, ids = p.sel.filter((id) => user(id));
+    if (!ids.length) return;
+    if (e.submitter?.value === "desactiver") {
+      ids.forEach((id) => { user(id).actif = false; S.journal.push({ id: seq++, etu: id, acteur: ui.user, annee: null, comp: null, type: "compte_modifie", detail: "sortie de formation : compte désactivé", at: now() }); });
+      ui.flash = { passage: { ok: true, m: `${ids.length} compte(s) désactivé(s) : données conservées, accès fermé.` } };
+    } else {
+      const annee = fd.get("annee"), parcours = fd.get("parcours"), referent = fd.get("referent"), groupe = fd.get("groupe").trim();
+      if (!annee && !parcours && !referent && !groupe) { ui.flash = { passage: { ok: false, m: "Choisissez au moins une modification à appliquer." } }; render(); return; }
+      let n = 0; const ignores = [];
+      for (const id of ids) {
+        const x = user(id), avant = x.annee;
+        if (annee === "suivante" && x.annee >= 3) { ignores.push(`${x.prenom} ${x.nom} (déjà en BUT3)`); continue; }
+        if (annee === "suivante") x.annee++; else if (annee) x.annee = +annee;
+        if (parcours) x.parcours = parcours;
+        if (referent === "__aucun") delete S.referents[id]; else if (referent) S.referents[id] = referent;
+        if (groupe) x.groupe = groupe;
+        const morceaux = [avant !== x.annee && `BUT${avant} → BUT${x.annee}`, parcours && `parcours ${parcours}`, referent && `référent ${referent === "__aucun" ? "retiré" : nom(referent)}`, groupe && `groupe ${groupe}`].filter(Boolean);
+        S.journal.push({ id: seq++, etu: id, acteur: ui.user, annee: null, comp: null, type: avant !== x.annee ? "passage_annee" : "compte_modifie", detail: morceaux.join(" · "), at: now() });
+        n++;
+      }
+      ui.flash = { passage: { ok: true, m: `${n} étudiant(s) mis à jour.${ignores.length ? ` Ignorés : ${ignores.join(", ")}.` : ""}` } };
+    }
+    p.sel = []; save(); render(); return;
+  }
+  if (kind === "ajout-etu" || kind === "ajout-ens") {
+    if (user(ui.user).role !== "admin") return;
+    const cible = kind === "ajout-etu" ? "etu" : "ens";
+    const nom = fd.get("nom").trim(), prenom = fd.get("prenom").trim(), email = fd.get("email").trim().toLowerCase();
+    let erreur = !nom || !prenom ? "Le nom et le prénom sont obligatoires." : email && !EMAIL_OK.test(email) ? "Adresse mail invalide." : email && USERS.some((u) => norm(u.email || "") === email) ? `L'adresse ${email} est déjà utilisée.` : "";
+    if (!erreur && cible === "etu" && !fd.get("annee")) erreur = "Choisissez l'année de BUT.";
+    if (erreur) { ui.flash = { ajout: { cible, ok: false, m: erreur } }; render(); return; }
+    if (cible === "etu") {
+      const id = "etu-" + seq++;
+      USERS.push({ id, role: "etudiant", nom, prenom, email, annee: +fd.get("annee"), parcours: fd.get("parcours"), groupe: fd.get("groupe").trim() });
+      if (fd.get("referent")) S.referents[id] = fd.get("referent");
+      ui.flash = { ajout: { cible, ok: true, m: `${prenom} ${nom} ajouté·e en BUT${fd.get("annee")}.` } };
+    } else {
+      const admin = fd.get("admin") === "1";
+      USERS.push({ id: "ens-" + seq++, role: admin ? "admin" : "enseignant", nom, prenom, email });
+      ui.flash = { ajout: { cible, ok: true, m: `${prenom} ${nom} ajouté·e${admin ? " comme administrateur" : ""}.` } };
+    }
+    save(); render(); return;
+  }
+  const etu = ui.etu, a = ui.annee, c = ui.onglet, cle = k(etu, a, c);
+  if (kind === "pres") {
+    if (!peutModifier(etu)) return;
+    S.pres[etu] = { texte: fd.get("texte").trim(), projet: fd.get("projet").trim(), maj: now() };
+    log(etu, null, null, "presentation_maj", ""); prevenirReferent(etu, null, null, "présentation et projet professionnel"); ui.flash = { pres: { ok: true, m: "Présentation enregistrée." } };
+  } else if (kind === "arg") {
+    if (!peutModifier(etu, a)) return;
+    const t = fd.get("texte").trim(), avant = S.args[cle];
+    if ((avant?.texte || "") === t) { ui.flash = { arg: { ok: true, m: "Aucune modification." } }; render(); return; }
+    const ecart = mots(t) - mots(avant?.texte);
+    S.args[cle] = { texte: t, maj: now() };
+    log(etu, a, c, avant ? "argumentaire_maj" : "argumentaire_cree", `${mots(t)} mots${avant ? ` (${ecart >= 0 ? "+" : ""}${ecart})` : ""}`);
+    prevenirReferent(etu, a, c, `argumentaire ${avant ? "modifié" : "rédigé"} (${mots(t)} mots)`);
+    ui.flash = { arg: { ok: true, m: "Argumentaire enregistré." } };
+  } else if (kind === "trace") {
+    if (!peutModifier(etu, a)) return;
+    const titre = fd.get("titre").trim();
+    const f = await lirePdf(form.querySelector("input[type=file]"));
+    if (typeof f === "string" || !titre) { ui.flash = { trace: { ok: false, m: !titre ? "Donnez un titre à la trace." : f } }; render(); return; }
+    if (tracesDe(etu, a, c).length >= MAX_TRACES) return;
+    S.traces.push({ id: "t" + seq++, etu, annee: a, comp: c, titre, desc: fd.get("desc").trim(), fichier: f.name, taille: f.size, depose: now(), maj: now() });
+    log(etu, a, c, "trace_ajoutee", titre); prevenirReferent(etu, a, c, `trace déposée : ${titre}`); delete ui.ouvert.nouvelle;
+    ui.flash = { trace: { ok: true, m: "Trace déposée." } };
+  } else if (kind === "edit") {
+    const t = S.traces.find((x) => x.id === form.dataset.trace);
+    if (!t || !peutModifier(t.etu, t.annee)) return;
+    const input = form.querySelector("input[type=file]");
+    let f = null;
+    if (input.files.length) { f = await lirePdf(input); if (typeof f === "string") { ui.flash = { trace: { ok: false, m: f } }; delete ui.ouvert["edit-" + t.id]; render(); return; } }
+    t.titre = fd.get("titre").trim() || t.titre; t.desc = fd.get("desc").trim(); t.maj = now();
+    if (f) { t.fichier = f.name; t.taille = f.size; }
+    log(t.etu, t.annee, t.comp, "trace_modifiee", f ? `${t.titre} — nouveau fichier : ${f.name}` : t.titre);
+    prevenirReferent(t.etu, t.annee, t.comp, f ? `fichier de trace remplacé : ${t.titre}` : `trace modifiée : ${t.titre}`);
+    delete ui.ouvert["edit-" + t.id]; ui.flash = { trace: { ok: true, m: f ? "Fichier remplacé." : "Trace modifiée." } };
+  } else if (kind === "eval") {
+    if (!suit(user(ui.user), etu)) return;
+    const niveau = fd.get("niveau") || "non_evalue";
+    const publierAussi = e.submitter?.value === "publier";
+    const note = lireNote(fd.get("note"));
+    // Erreurs affichées sans redessiner : la saisie est conservée.
+    if (publierAussi && niveau === "non_evalue") return erreurFormulaire(form, "Choisissez un niveau avant de publier.");
+    if (note === undefined) return erreurFormulaire(form, "La note doit être comprise entre 0 et 20.");
+    if (niveau !== "non_evalue" && note === null) return erreurFormulaire(form, "Saisissez la note sur 20 : elle accompagne obligatoirement le niveau.");
+    const noteRetenue = niveau === "non_evalue" ? null : note;
+    S.evals[cle] = { ...(S.evals[cle] || { pub: null }), niveau, note: noteRetenue, com: fd.get("com").trim(), ens: ui.user, maj: now() };
+    log(etu, a, c, "evaluation", `${libEval(niveau)}${noteRetenue !== null ? ` · ${fmtNote(noteRetenue)}` : ""} (brouillon)`);
+    if (publierAussi) publier(etu, a, c);
+    ui.flash = { eval: { ok: true, m: publierAussi ? "Évaluation publiée : l'étudiant·e peut la consulter." : "Brouillon enregistré, non visible par l'étudiant·e." } };
+  } else if (kind === "rdv") {
+    if (!suit(user(ui.user), etu)) return;
+    const n = +form.dataset.numero, note = lireNote(fd.get("note"));
+    if (note === undefined) return erreurFormulaire(form, "La note doit être comprise entre 0 et 20.");
+    if (note === null) return erreurFormulaire(form, "Saisissez la note du rendez-vous sur 20.");
+    const avant = rdvDe(etu, a, n);
+    S.rdv[`${etu}|${a}|${n}`] = { ...(avant || { pub: null }), date: fd.get("date") || "", note, com: fd.get("com").trim(), ens: ui.user, maj: now() };
+    log(etu, a, null, "rendez_vous", `${RDV[n - 1].libelle} · ${fmtNote(note)} (brouillon)`);
+    const publierAussi = e.submitter?.value === "publier";
+    if (publierAussi) publier(etu, a, null, n);
+    ui.flash = { rdv: { n, ok: true, m: publierAussi ? "Rendez-vous publié : l'étudiant·e voit la note." : "Brouillon enregistré, non visible par l'étudiant·e." } };
+  }
+  save(); render();
+});
+
+render();
+</script>
+
+</body>
+</html>
