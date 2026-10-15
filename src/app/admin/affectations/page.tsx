@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
 import { FormAjoutEnseignant, FormAjoutEtudiant, FormImport } from "@/components/admin";
-import { affecterReferent } from "@/app/actions";
+import { affecterReferent, definirCG2PActifAction } from "@/app/actions";
 import Link from "next/link";
-import { compterCourrielsEnAttente, listerComptesDesactives, listerEnseignants, listerEtudiants } from "@/lib/db";
+import { cg2pEstActif, compterCourrielsEnAttente, listerComptesDesactives, listerEnseignants, listerEtudiants } from "@/lib/db";
 import { estAdmin, utilisateurCourant } from "@/lib/session";
 import { ANNEES } from "@/lib/referentiel";
 import { PARCOURS_GEA } from "@/lib/import-etudiants";
@@ -19,6 +19,8 @@ export default async function Affectations() {
   const sansReferent = etudiants.filter((e) => !e.referent_id).length;
   const desactives = await listerComptesDesactives();
   const courriels = await compterCourrielsEnAttente();
+  const cg2pActif = await cg2pEstActif();
+  const parcoursDisponibles = cg2pActif ? PARCOURS_GEA : PARCOURS_GEA.filter((p) => p !== "CG2P");
 
   return (
     <>
@@ -34,10 +36,28 @@ export default async function Affectations() {
           Importez les listes d&apos;étudiants, ajoutez des comptes et affectez chaque étudiant·e à son enseignant·e référent·e, seul·e
           (avec l&apos;administrateur) à voir et évaluer son portfolio.
         </p>
-        <p className="mb-6 text-xs text-muted">
+        <p className="mb-4 text-xs text-muted">
           Courriels en attente d&apos;envoi : {courriels.immediat} immédiat(s), {courriels.quotidien} pour le récapitulatif quotidien · envoi
           activé une fois la messagerie de l&apos;université branchée.
         </p>
+
+        <form
+          action={definirCG2PActifAction}
+          className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
+        >
+          <input type="hidden" name="actif" value={cg2pActif ? "0" : "1"} />
+          <span>
+            Parcours <strong>CG2P</strong> (Contrôle de gestion et pilotage de la performance) :{" "}
+            {cg2pActif ? (
+              <span className="font-medium text-emerald-700">activé, proposé dans les listes de choix</span>
+            ) : (
+              <span className="text-muted">désactivé, masqué des listes de choix</span>
+            )}
+          </span>
+          <button className="ml-auto rounded-md border border-line px-3 py-1.5 hover:bg-primary-soft">
+            {cg2pActif ? "Désactiver" : "Activer"}
+          </button>
+        </form>
 
         <section className="mb-6 rounded-xl border border-line bg-surface p-5">
           <h2 className="mb-1 text-base font-semibold">Importer une liste d&apos;étudiants</h2>
@@ -52,7 +72,7 @@ export default async function Affectations() {
         <div className="mb-6 grid gap-6 lg:grid-cols-2">
           <section className="rounded-xl border border-line bg-surface p-5">
             <h2 className="mb-3 text-base font-semibold">Ajouter un·e étudiant·e</h2>
-            <FormAjoutEtudiant enseignants={enseignants.map((e) => ({ id: e.id, nom: `${e.prenom} ${e.nom}` }))} parcours={PARCOURS_GEA} />
+            <FormAjoutEtudiant enseignants={enseignants.map((e) => ({ id: e.id, nom: `${e.prenom} ${e.nom}` }))} parcours={parcoursDisponibles} />
           </section>
           <section className="rounded-xl border border-line bg-surface p-5">
             <h2 className="mb-3 text-base font-semibold">Ajouter un·e enseignant·e</h2>

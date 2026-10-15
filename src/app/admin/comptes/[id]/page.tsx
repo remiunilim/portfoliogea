@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
 import { FormActivation, FormModifierCompte, FormSuppression } from "@/components/admin";
-import { getUtilisateur, historiqueCompte, listerEnseignants } from "@/lib/db";
+import { cg2pEstActif, getUtilisateur, historiqueCompte, listerEnseignants } from "@/lib/db";
 import { estAdmin, utilisateurCourant } from "@/lib/session";
 import { PARCOURS_GEA } from "@/lib/import-etudiants";
 
@@ -14,6 +14,9 @@ export default async function FicheCompte(props: PageProps<"/admin/comptes/[id]"
   const { id } = await props.params;
   const compte = await getUtilisateur(id);
   if (!compte) notFound();
+  // CG2P reste proposé pour un compte déjà affecté à ce parcours, même désactivé entre-temps.
+  const parcoursDisponibles =
+    (await cg2pEstActif()) || compte.parcours === "CG2P" ? PARCOURS_GEA : PARCOURS_GEA.filter((p) => p !== "CG2P");
   const etudiant = compte.role === "etudiant";
   const h = await historiqueCompte(compte.id);
   const resume = etudiant
@@ -52,7 +55,7 @@ export default async function FicheCompte(props: PageProps<"/admin/comptes/[id]"
           <FormModifierCompte
             compte={{ ...compte }}
             enseignants={(await listerEnseignants()).map((e) => ({ id: e.id, nom: `${e.prenom} ${e.nom}` }))}
-            parcours={PARCOURS_GEA}
+            parcours={parcoursDisponibles}
           />
         </section>
 

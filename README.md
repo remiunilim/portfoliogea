@@ -1,6 +1,6 @@
 # Folio GEA : portfolio de compétences du BUT GEA (PAÉ)
 
-Plateforme de dépôt, de suivi et d'évaluation des portfolios des étudiants du BUT GEA. Les référentiels des parcours **GEMA, GPRH et GC2F** sont configurés : tronc commun C1 à C3, et C4-C5 propres à chaque parcours (un parcours non encore configuré, comme CG2P, affiche provisoirement GEMA). L'interface propose un **thème clair et un thème sombre** (bouton lune / soleil dans l'en-tête). Elle s'inspire d'UniFolio (IUT de Troyes) et de la démarche portfolio présentée lors des cafés pédagogiques.
+Plateforme de dépôt, de suivi et d'évaluation des portfolios des étudiants du BUT GEA. Les référentiels des 4 parcours **GEMA, GPRH, GC2F et CG2P** sont configurés (tronc commun C1 à C3, C4-C5 propres à chaque parcours), d'après le PPN BUT GEA 2022. **CG2P reste masqué des listes de choix tant que l'administrateur ne l'a pas activé** (page *Étudiants et affectations*) : aucun établissement ne l'ouvre encore à l'IUT du Limousin. L'interface propose un **thème clair et un thème sombre** (bouton lune / soleil dans l'en-tête). Elle s'inspire d'UniFolio (IUT de Troyes) et de la démarche portfolio présentée lors des cafés pédagogiques.
 
 ## Lancer en local
 
@@ -35,7 +35,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 - **Export PDF** : l'onglet *Portfolio complet* produit un seul PDF qui contient, dans l'ordre :
   - une couverture et un sommaire paginé ;
   - la présentation de l'étudiant ;
-  - pour chaque année et chaque compétence, une page avec l'évaluation publiée (niveau, note, note finale), les apprentissages critiques numérotés et l'argumentaire, suivie des traces PDF intégrées ;
+  - pour chaque année et chaque compétence, une page avec l'évaluation publiée (niveau, note, note finale), les apprentissages critiques numérotés (ex. AC24.03, AC34.01 — année de BUT puis numéro de compétence, conforme au PPN) et l'argumentaire, suivie des traces PDF intégrées ;
   - pour chaque année, une page « Rendez-vous de suivi et notes finales ».
 
   Chaque page de trace porte en pied de page une étiquette qui situe la trace dans le portfolio.
@@ -45,7 +45,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 
 | Fichier | Rôle |
 | --- | --- |
-| `src/lib/referentiel.ts` | Compétences, niveaux et apprentissages critiques des parcours GEMA, GPRH et GC2F, pondération des notes (source unique, à mettre à jour avec le nouveau programme national) |
+| `src/lib/referentiel.ts` | Compétences, niveaux et apprentissages critiques des 4 parcours (GEMA, GPRH, GC2F, CG2P), pondération des notes (source unique, à mettre à jour avec le nouveau programme national) |
 | `src/lib/db.ts` | Schéma MariaDB, requêtes (toutes asynchrones) et jeu de démonstration |
 | `src/lib/session.ts` | Session (cookie) et règles d'accès (étudiant, référent, administrateur) |
 | `src/lib/oidc.ts`, `src/app/connexion/oidc` | Connexion SSO OpenID Connect (démarrage et retour) |
@@ -88,4 +88,5 @@ npm run build && npm run start                       # ou via le service systemd
 - Essai de la connexion SSO OpenID Connect avec le vrai fournisseur de la DSI, une fois ses réglages reçus
 - Configuration Apache et systemd en production (modèles dans `deploy/`), sauvegardes de la base MariaDB
 - Envoi effectif des courriels de la file d'attente (SMTP de l'université), y compris le récapitulatif quotidien
-- Nouvelles versions du référentiel (nouveau programme national) et référentiel CG2P
+- Nouvelles versions du référentiel, le jour où le nouveau programme national sera publié
+- Activer CG2P (page *Étudiants et affectations* → section « Parcours CG2P ») quand l'IUT ouvrira ce parcours

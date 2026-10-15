@@ -8,6 +8,7 @@ import {
   appliquerChangementsGroupes,
   changerActivation,
   creerUtilisateur,
+  definirCG2PActif,
   definirPreferenceCourriel,
   definirReferent,
   emailExiste,
@@ -348,6 +349,13 @@ export async function affecterReferent(formData: FormData) {
   if (!etudiant || etudiant.role !== "etudiant") return;
   if (referentId && !estEnseignant((await getUtilisateur(referentId)) ?? null)) return;
   await definirReferent(etudiant.id, referentId || null);
+  refresh();
+}
+
+export async function definirCG2PActifAction(formData: FormData) {
+  const u = await utilisateurCourant();
+  if (!estAdmin(u)) return;
+  await definirCG2PActif(formData.get("actif") === "1");
   refresh();
 }
 

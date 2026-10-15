@@ -246,6 +246,11 @@ async function creerSchema(pool: Pool) {
       statut VARCHAR(20) NOT NULL DEFAULT 'en_attente',
       cree_le VARCHAR(32) NOT NULL
     ) ENGINE=InnoDB`,
+    // Réglages globaux simples (ex. activation du parcours CG2P), modifiables par l'administrateur.
+    `CREATE TABLE IF NOT EXISTS parametres (
+      cle VARCHAR(50) PRIMARY KEY,
+      valeur VARCHAR(255) NOT NULL
+    ) ENGINE=InnoDB`,
   ];
   for (const sql of tables) await pool.query(sql);
   // Colonnes ajoutées après la création initiale de la table (sans effet si déjà présentes :
@@ -932,6 +937,26 @@ export async function marquerConsulte(enseignantId: string, etudiantId: string) 
     `INSERT INTO consultations (enseignant_id, etudiant_id, vu_le) VALUES (?, ?, ?)
      ON DUPLICATE KEY UPDATE vu_le = VALUES(vu_le)`,
     [enseignantId, etudiantId, maintenant()],
+  );
+}
+
+// ---------- Réglages ----------
+
+const CLE_CG2P_ACTIF = "cg2p_actif";
+
+// Le référentiel CG2P est configuré dans le code, mais masqué des listes de choix (import,
+// ajout, modification de compte) tant que l'administrateur ne l'a pas activé ici.
+export async function cg2pEstActif(): Promise<boolean> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT valeur FROM parametres WHERE cle = ?", [CLE_CG2P_ACTIF]);
+  return (lignes as { valeur: string }[])[0]?.valeur === "1";
+}
+
+export async function definirCG2PActif(actif: boolean) {
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO parametres (cle, valeur) VALUES (?, ?) ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)`,
+    [CLE_CG2P_ACTIF, actif ? "1" : "0"],
   );
 }
 

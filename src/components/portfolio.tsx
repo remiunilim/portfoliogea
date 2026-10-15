@@ -257,7 +257,7 @@ export function VueCompetence({
           <ul className="space-y-1.5">
             {niveau.apprentissagesCritiques.map((ac, i) => (
               <li key={ac} className="flex gap-2">
-                <span className="shrink-0 font-mono text-xs font-semibold leading-5 text-primary">{codeAC(competence, niveau, i)}</span>
+                <span className="shrink-0 font-mono text-xs font-semibold leading-5 text-primary">{codeAC(competence, annee, i)}</span>
                 <span>{ac}</span>
               </li>
             ))}

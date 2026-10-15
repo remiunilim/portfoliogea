@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
 import { FormPassage } from "@/components/admin";
-import { listerEnseignants, listerEtudiants } from "@/lib/db";
+import { cg2pEstActif, listerEnseignants, listerEtudiants } from "@/lib/db";
 import { estAdmin, utilisateurCourant } from "@/lib/session";
 import { PARCOURS_GEA } from "@/lib/import-etudiants";
 
@@ -11,6 +11,7 @@ export default async function Passage() {
   const u = await utilisateurCourant();
   if (!u) redirect("/connexion");
   if (!estAdmin(u)) redirect("/");
+  const parcoursDisponibles = (await cg2pEstActif()) ? PARCOURS_GEA : PARCOURS_GEA.filter((p) => p !== "CG2P");
   const enseignants = await listerEnseignants();
   const nomEns = new Map(enseignants.map((e) => [e.id, `${e.prenom} ${e.nom}`]));
   const etudiants = (await listerEtudiants()).map((e) => ({
@@ -39,7 +40,7 @@ export default async function Passage() {
         <FormPassage
           etudiants={etudiants}
           enseignants={enseignants.map((e) => ({ id: e.id, nom: `${e.prenom} ${e.nom}` }))}
-          parcours={PARCOURS_GEA}
+          parcours={parcoursDisponibles}
         />
       </main>
     </>

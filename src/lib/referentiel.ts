@@ -1,6 +1,6 @@
 // Référentiel de compétences du BUT GEA : tronc commun (C1 à C3) et compétences propres à chaque
-// parcours (C4 et C5). Source : référentiels nationaux 2022 (parcours GEMA, GPRH et GC2F).
-// Ce fichier est la seule source de vérité pour les onglets du portfolio :
+// parcours (C4 et C5). Source : PPN (programme pédagogique national) BUT GEA 2022, les 4 parcours
+// (GEMA, GPRH, GC2F, CG2P). Ce fichier est la seule source de vérité pour les onglets du portfolio :
 // le mettre à jour suffit lorsque le nouveau programme national sera publié.
 
 export type AnneeBUT = 1 | 2 | 3;
@@ -437,7 +437,87 @@ const COMPETENCES_GC2F: Competence[] = [
   },
 ];
 
-// Parcours dont le référentiel est configuré. Un parcours inconnu (ex. CG2P) retombe sur GEMA.
+// Compétences propres au parcours CG2P (référentiel national 2022). Configuré, mais masqué des
+// listes de choix tant que l'administrateur ne l'a pas activé (voir CG2P_ACTIF dans db.ts) :
+// aucun établissement ne l'ouvre encore dans cet IUT.
+const COMPETENCES_CG2P: Competence[] = [
+  {
+    code: "C4",
+    nomCourt: "Concevoir",
+    intitule: "Concevoir des outils de contrôle de gestion",
+    troncCommun: false,
+    composantes: [
+      "En choisissant une méthode de calcul des coûts pertinente",
+      "En solutionnant des problèmes de gestion en avenir certain et aléatoire",
+      "En maîtrisant la démarche budgétaire avec ses enjeux et ses limites",
+      "En proposant des améliorations en fonction d'écarts budgétaires constatés",
+      "En élaborant des outils de gestion adaptés autour de l'entreprise étendue et de son environnement",
+    ],
+    situations: ["Dans des organisations de tailles et d'espaces géographiques différents", "Dans des organisations marchandes ou non marchandes"],
+    niveaux: {
+      2: {
+        niveau: 1,
+        libelle: "Analyser le système de contrôle de gestion",
+        apprentissagesCritiques: [
+          "Identifier les intérêts et les limites des méthodes de calcul de coûts",
+          "Mettre en oeuvre les démarches et pratiques budgétaires en lien avec les choix managériaux",
+          "Analyser la rentabilité et le risque financier",
+          "Analyser les relations des parties prenantes liées à la complexité du système de l'organisation",
+          "Analyser la valeur dans une approche systémique",
+        ],
+      },
+      3: {
+        niveau: 2,
+        libelle: "Améliorer le système de contrôle de gestion",
+        apprentissagesCritiques: [
+          "Rédiger un diagnostic approfondi en lien avec les choix managériaux et la gestion des risques",
+          "Conseiller le décideur sur des actions correctives et préventives",
+          "Mettre en oeuvre un système de management intégré dans une démarche qualité et d'amélioration continue de la performance globale de l'entreprise",
+          "Prendre en compte les coûts environnementaux, sociaux et sociétaux dans une approche systémique",
+        ],
+      },
+    },
+  },
+  {
+    code: "C5",
+    nomCourt: "Améliorer",
+    intitule: "Mettre en œuvre des leviers d'amélioration continue des performances de l'organisation",
+    troncCommun: false,
+    composantes: [
+      "En utilisant efficacement le processus de contrôle de gestion dans la conduite du changement",
+      "En optimisant les flux grâce au système d'information",
+      "En concevant des tableaux de bord adaptés à la prise de décision",
+      "En optimisant la performance (reporting et indicateurs clés de performance)",
+    ],
+    situations: ["Dans des organisations de tailles et d'espaces géographiques différents", "Dans des organisations marchandes ou non marchandes"],
+    niveaux: {
+      2: {
+        niveau: 1,
+        libelle: "Analyser les outils de la performance",
+        apprentissagesCritiques: [
+          "Critiquer le fonctionnement d'une organisation",
+          "Définir les indicateurs clés de performances",
+          "Mettre en oeuvre des outils de suivi et de pilotage",
+          "Exploiter des outils de visualisation des données",
+        ],
+      },
+      3: {
+        niveau: 2,
+        libelle: "Améliorer les outils de la performance",
+        apprentissagesCritiques: [
+          "Exploiter les fonctionnalités avancées et adaptées d'un ERP / PGI",
+          "Confronter différentes sources de données hétérogènes",
+          "Proposer des plans d'action et des indicateurs cibles",
+          "Analyser les enjeux de la RSE dans une approche globale de la performance",
+        ],
+      },
+    },
+  },
+];
+
+// Parcours dont le référentiel est configuré. Un parcours inconnu retombe sur GEMA.
+// CG2P est configuré (données exactes du PPN) mais n'apparaît dans les listes de choix que
+// si l'administrateur l'a activé (page Étudiants et affectations) : voir CG2P_ACTIF dans db.ts.
 export const PARCOURS_CONFIGURES: Record<string, { code: string; intitule: string; competences: Competence[] }> = {
   GEMA: {
     code: "GEMA",
@@ -446,6 +526,7 @@ export const PARCOURS_CONFIGURES: Record<string, { code: string; intitule: strin
   },
   GPRH: { code: "GPRH", intitule: "Gestion et pilotage des ressources humaines", competences: COMPETENCES_GPRH },
   GC2F: { code: "GC2F", intitule: "Gestion comptable, fiscale et financière", competences: COMPETENCES_GC2F },
+  CG2P: { code: "CG2P", intitule: "Contrôle de gestion et pilotage de la performance", competences: COMPETENCES_CG2P },
 };
 export const PARCOURS_PAR_DEFAUT = "GEMA";
 
@@ -482,10 +563,13 @@ export function estAnneeBUT(n: number): n is AnneeBUT {
   return n === 1 || n === 2 || n === 3;
 }
 
-// Numéro d'un apprentissage critique, selon la convention des BUT :
-// AC + n° de compétence + n° de niveau + « . » + rang sur deux chiffres (ex. AC11.01, AC42.03).
-export function codeAC(competence: Competence, niveau: NiveauCompetence, rang: number): string {
-  return `AC${competence.code.replace(/\D/g, "")}${niveau.niveau}.${String(rang + 1).padStart(2, "0")}`;
+// Numéro d'un apprentissage critique, selon la convention nationale des BUT :
+// AC + n° d'année de BUT + n° de compétence + « . » + rang sur deux chiffres (ex. AC11.01, AC24.03).
+// Le premier chiffre est bien l'année de BUT (1, 2 ou 3), pas le niveau propre à la compétence :
+// pour une compétence de parcours (C4, C5, absente en BUT1), le niveau 1 se situe en BUT2 (→ AC24.xx)
+// et le niveau 2 en BUT3 (→ AC34.xx), vérifié sur le référentiel national (PPN BUT GEA 2022).
+export function codeAC(competence: Competence, annee: AnneeBUT, rang: number): string {
+  return `AC${annee}${competence.code.replace(/\D/g, "")}.${String(rang + 1).padStart(2, "0")}`;
 }
 
 // Échelle d'évaluation du PAÉ (niveau + note facultative + commentaire, par compétence et par année).

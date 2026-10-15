@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { PARCOURS_PAR_DEFAUT, parcoursEstConfigure } from "./referentiel";
 import {
+  cg2pEstActif,
   creerUtilisateur,
   emailExiste,
   listerEnseignants,
@@ -186,6 +187,7 @@ export async function analyserImport(lignes: LigneBrute[], creerEnseignants: boo
   const enseignants = await listerEnseignants();
   // Les comptes désactivés sont reconnus aussi : un étudiant qui revient est réactivé, pas recréé.
   const etudiants = await listerEtudiants({ inclureDesactives: true });
+  const cg2pActif = await cg2pEstActif();
   const vus = new Map<string, number>();
   const emailsVus = new Map<string, number>();
   const aCreer = new Map<string, { prenom: string; nom: string; email: string }>();
@@ -207,7 +209,9 @@ export async function analyserImport(lignes: LigneBrute[], creerEnseignants: boo
     const parcours = (l.parcours ?? "").toUpperCase().replace(/\s+/g, "") || "GEMA";
     if (!l.parcours) avertissements.push("Parcours absent : GEMA retenu.");
     else if (!(PARCOURS_GEA as readonly string[]).includes(parcours)) erreurs.push(`Parcours « ${l.parcours} » inconnu (${PARCOURS_GEA.join(", ")}).`);
-    else if (!parcoursEstConfigure(parcours)) {
+    else if (parcours === "CG2P" && !cg2pActif) {
+      avertissements.push("Parcours CG2P pas encore activé par l'administrateur (page Étudiants et affectations) : importé quand même.");
+    } else if (!parcoursEstConfigure(parcours)) {
       avertissements.push(`Référentiel ${parcours} pas encore configuré : les onglets ${PARCOURS_PAR_DEFAUT} seront affichés en attendant.`);
     }
 

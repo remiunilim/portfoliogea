@@ -251,7 +251,7 @@ export async function genererPortfolioPdf(etudiant: Utilisateur): Promise<Uint8A
       }
 
       r.titreSection("Apprentissages critiques visés", couleur);
-      r.puces(niveau.apprentissagesCritiques.map((ac, i) => `${codeAC(c, niveau, i)}  ${ac}`), 9.5);
+      r.puces(niveau.apprentissagesCritiques.map((ac, i) => `${codeAC(c, annee, i)}  ${ac}`), 9.5);
 
       r.titreSection("Argumentaire", couleur);
       r.texte(arg?.texte || "Aucun argumentaire déposé.", { police: arg?.texte ? "normale" : "italique" });
