@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
-import { FormActivation, FormModifierCompte, FormSuppression } from "@/components/admin";
-import { cg2pEstActif, getUtilisateur, historiqueCompte, listerEnseignants } from "@/lib/db";
+import { FormActivation, FormDefinirMotDePasse, FormModifierCompte, FormSuppression } from "@/components/admin";
+import { cg2pEstActif, connexionParMotDePasseActive, getUtilisateur, historiqueCompte, listerEnseignants } from "@/lib/db";
 import { estAdmin, utilisateurCourant } from "@/lib/session";
 import { PARCOURS_GEA } from "@/lib/import-etudiants";
 
@@ -23,6 +23,7 @@ export default async function FicheCompte(props: PageProps<"/admin/comptes/[id]"
     ? `${h.argumentaires} argumentaire(s), ${h.traces} trace(s), ${h.evaluationsRecues} évaluation(s)`
     : `${h.evaluationsDonnees} évaluation(s), ${h.actionsJournal} action(s), ${h.etudiantsSuivis} étudiant(s) suivi(s)`;
   const lui = compte.id === u.id;
+  const mdpActif = await connexionParMotDePasseActive();
 
   return (
     <>
@@ -58,6 +59,13 @@ export default async function FicheCompte(props: PageProps<"/admin/comptes/[id]"
             parcours={parcoursDisponibles}
           />
         </section>
+
+        {mdpActif && (
+          <section className="mb-6 rounded-xl border border-line bg-surface p-5">
+            <h2 className="mb-2 text-base font-semibold">Mot de passe</h2>
+            <FormDefinirMotDePasse id={compte.id} nom={`${compte.prenom} ${compte.nom}`} />
+          </section>
+        )}
 
         {!lui && (
           <>

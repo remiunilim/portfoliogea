@@ -7,6 +7,8 @@ import {
   ajouterEtudiant,
   archivageGroupe,
   changerActivationAction,
+  changerMotDePasseAction,
+  definirMotDePasseAction,
   enregistrerPreferences,
   importerEtudiants,
   modifierCompteAction,
@@ -421,6 +423,61 @@ export function FormSuppression({ id, nom, role, resume }: { id: string; nom: st
           disabled={enCours || saisie.trim().toLowerCase() !== nom.toLowerCase()}
         >
           Supprimer définitivement
+        </button>
+        <Retour etat={etat} />
+      </div>
+    </form>
+  );
+}
+
+// ---------- Mot de passe (transitoire, en attendant le SSO) ----------
+
+export function FormDefinirMotDePasse({ id, nom }: { id: string; nom: string }) {
+  const [etat, action, enCours] = useActionConservee(definirMotDePasseAction, null);
+  const [motDePasse, setMotDePasse] = useState("");
+  return (
+    <form onSubmit={action} className="space-y-3">
+      <input type="hidden" name="id" value={id} />
+      <p className="text-sm text-muted">
+        Définit ou réinitialise le mot de passe de connexion de {nom}. À lui communiquer directement (aucun courriel
+        n&apos;est envoyé automatiquement).
+      </p>
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium">Nouveau mot de passe (8 caractères minimum)</span>
+        <input
+          name="mot_de_passe"
+          type="text"
+          value={motDePasse}
+          onChange={(e) => setMotDePasse(e.target.value)}
+          autoComplete="off"
+          className={champ}
+        />
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <button className={boutonSecondaire} disabled={enCours || motDePasse.length < 8}>
+          Définir le mot de passe
+        </button>
+        <Retour etat={etat} />
+      </div>
+    </form>
+  );
+}
+
+export function FormChangerMotDePasse() {
+  const [etat, action, enCours] = useActionConservee(changerMotDePasseAction, null);
+  return (
+    <form onSubmit={action} className="space-y-3">
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium">Mot de passe actuel</span>
+        <input name="mot_de_passe_actuel" type="password" autoComplete="current-password" className={champ} />
+      </label>
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium">Nouveau mot de passe (8 caractères minimum)</span>
+        <input name="nouveau_mot_de_passe" type="password" autoComplete="new-password" className={champ} />
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <button className={boutonSecondaire} disabled={enCours}>
+          Changer le mot de passe
         </button>
         <Retour etat={etat} />
       </div>

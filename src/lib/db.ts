@@ -27,6 +27,8 @@ export type Utilisateur = {
   // Identifiant stable transmis par le fournisseur OpenID Connect de l'université (rempli au premier
   // vrai login SSO, en liant le compte existant repéré par email) ; absent en mode démonstration.
   identifiant_oidc: string | null;
+  // Haché (jamais le mot de passe en clair) : connexion transitoire en attendant le SSO.
+  mot_de_passe_hash: string | null;
 };
 
 export type PreferenceCourriel = "immediat" | "quotidien" | "aucun";
@@ -256,6 +258,7 @@ async function creerSchema(pool: Pool) {
   // Colonnes ajoutées après la création initiale de la table (sans effet si déjà présentes :
   // MariaDB ignore silencieusement un ADD COLUMN IF NOT EXISTS déjà satisfait).
   await pool.query("ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS identifiant_oidc VARCHAR(255) UNIQUE");
+  await pool.query("ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mot_de_passe_hash VARCHAR(255)");
   await pool.query("ALTER TABLE courriels ADD COLUMN IF NOT EXISTS envoye_le VARCHAR(32)");
 }
 
@@ -290,6 +293,13 @@ export async function getUtilisateurParEmail(email: string): Promise<Utilisateur
 export async function lierIdentifiantOidc(id: string, identifiantOidc: string) {
   const pool = await obtenirPool();
   await pool.query("UPDATE utilisateurs SET identifiant_oidc = ? WHERE id = ?", [identifiantOidc, id]);
+}
+
+// Connexion par mot de passe (transitoire, en attendant le SSO) : le hachage est calculé par
+// l'appelant (voir src/lib/mdp.ts), jamais stocké ni journalisé en clair.
+export async function definirMotDePasseHache(id: string, hachage: string) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE utilisateurs SET mot_de_passe_hash = ? WHERE id = ?", [hachage, id]);
 }
 
 export async function listerUtilisateurs(): Promise<Utilisateur[]> {
@@ -1009,6 +1019,25 @@ export async function definirEnvoiMailsActif(actif: boolean) {
   );
 }
 
+const CLE_CONNEXION_MDP_ACTIVE = "connexion_mdp_active";
+
+// Tant que ni le SSO (OIDC_* dans .env.local) ni ce réglage ne sont actifs, /connexion reste en
+// mode démonstration (choix d'un compte dans une liste, sans mot de passe) : à n'utiliser qu'avec
+// des comptes fictifs. Active ici, /connexion demande une adresse mail et un mot de passe.
+export async function connexionParMotDePasseActive(): Promise<boolean> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT valeur FROM parametres WHERE cle = ?", [CLE_CONNEXION_MDP_ACTIVE]);
+  return (lignes as { valeur: string }[])[0]?.valeur === "1";
+}
+
+export async function definirConnexionParMotDePasseActive(actif: boolean) {
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO parametres (cle, valeur) VALUES (?, ?) ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)`,
+    [CLE_CONNEXION_MDP_ACTIVE, actif ? "1" : "0"],
+  );
+}
+
 // ---------- Jeu de démonstration ----------
 
 // Rendez-vous de suivi de démonstration (ajoutés une seule fois, base neuve ou existante).
@@ -1169,7 +1198,7 @@ async function completerDemo(pool: Pool) {
 }
 
 async function peuplerDemo(pool: Pool) {
-  const utilisateurs: Omit<Utilisateur, "referent_id" | "parcours" | "actif" | "pref_courriel" | "identifiant_oidc">[] = [
+  const utilisateurs: Omit<Utilisateur, "referent_id" | "parcours" | "actif" | "pref_courriel" | "identifiant_oidc" | "mot_de_passe_hash">[] = [
     { id: "ens-martin", prenom: "Claire", nom: "Martin", email: "claire.martin@exemple.fr", role: "admin", annee_but: null, groupe: null },
     { id: "ens-bernard", prenom: "Thomas", nom: "Bernard", email: "thomas.bernard@exemple.fr", role: "enseignant", annee_but: null, groupe: null },
     { id: "etu-dubois", prenom: "Léa", nom: "Dubois", email: "lea.dubois@etu.exemple.fr", role: "etudiant", annee_but: 1, groupe: "TD1" },

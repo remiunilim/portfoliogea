@@ -2,8 +2,9 @@ import { seConnecter } from "@/app/actions";
 import { connection } from "next/server";
 import { cookies } from "next/headers";
 import { BoutonTheme } from "@/components/BoutonTheme";
+import { FormConnexionMotDePasse } from "@/components/connexion";
 import { COOKIE_THEME, lireTheme } from "@/lib/theme";
-import { listerUtilisateurs } from "@/lib/db";
+import { connexionParMotDePasseActive, listerUtilisateurs } from "@/lib/db";
 import { oidcConfigure } from "@/lib/oidc";
 
 const MESSAGES_ERREUR: Record<string, string> = {
@@ -40,6 +41,28 @@ export default async function Connexion(props: PageProps<"/connexion">) {
         >
           Se connecter avec le compte de l&apos;université
         </a>
+      </main>
+    );
+  }
+
+  if (await connexionParMotDePasseActive()) {
+    return (
+      <main className="mx-auto w-full max-w-md px-4 py-24 sm:px-6">
+        <div className="mb-8 flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-lg bg-primary text-lg font-bold text-white">F</span>
+          <div>
+            <h1 className="text-2xl font-semibold">Folio GEA</h1>
+            <p className="text-sm text-muted">Portfolio de compétences du BUT GEA</p>
+          </div>
+          <div className="ml-auto">
+            <BoutonTheme initial={theme} />
+          </div>
+        </div>
+        <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          Connexion transitoire par mot de passe, en attendant le SSO de l&apos;université. Mot de passe oublié ou jamais
+          reçu : contactez l&apos;administrateur.
+        </p>
+        <FormConnexionMotDePasse />
       </main>
     );
   }

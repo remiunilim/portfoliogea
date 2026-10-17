@@ -50,6 +50,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 | `src/lib/db.ts` | Schéma MariaDB, requêtes (toutes asynchrones) et jeu de démonstration |
 | `src/lib/session.ts` | Session (cookie) et règles d'accès (étudiant, référent, administrateur) |
 | `src/lib/oidc.ts`, `src/app/connexion/oidc` | Connexion SSO OpenID Connect (démarrage et retour) |
+| `src/lib/mdp.ts`, `src/components/connexion.tsx` | Connexion par mot de passe (hachage scrypt, formulaire) — transitoire, avant le SSO |
 | `src/lib/export-pdf.ts` | Assemblage du portfolio en un seul PDF (pdf-lib) |
 | `src/lib/mail.ts`, `src/lib/courriels.ts` | Envoi SMTP et vidage de la file de courriels (`src/app/api/cron/courriels`, déclenché périodiquement, voir `deploy/`) |
 | `src/lib/import-etudiants.ts` | Lecture, contrôle et application de l'import des listes d'étudiants (ExcelJS), modèle Excel |
@@ -77,6 +78,15 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   - `deploy/folio-gea.service` : service systemd (lance `next start`) — bien suivre l'ordre des commandes dans ses commentaires : le dossier `data/` doit exister (avec les bons droits) **avant** le premier démarrage, sinon le service échoue (erreur systemd 226/NAMESPACE)
   - `deploy/folio-gea-courriels.service`/`.timer` et `deploy/folio-gea-courriels-quotidien.service`/`.timer` : vidage périodique de la file de courriels
 - **Connexion SSO OpenID Connect** : faite (`src/lib/oidc.ts`, routes `src/app/connexion/oidc`), mais **pas encore testée avec le vrai fournisseur de la DSI** — en attente de ses réglages. Tant que `OIDC_ISSUER` (et les autres variables `OIDC_*` de `.env.example`) ne sont pas renseignées, `/connexion` reste en mode démonstration (choix d'un compte fictif) ; dès qu'elles le sont, elle affiche un seul bouton « Se connecter avec le compte de l'université ». Au premier vrai login, le compte est reconnu par son **email** (celui déjà enregistré via l'import Excel ou l'ajout manuel) puis l'identifiant OpenID Connect y est lié pour les connexions suivantes. **Aucun compte n'est créé automatiquement** : un compte universitaire inconnu de Folio GEA affiche un message invitant à contacter l'administrateur (l'étudiant·e ou l'enseignant·e doit déjà avoir été importé·e ou ajouté·e). À demander à la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, et l'URL de retour à déclarer chez eux (`OIDC_REDIRECT_URI`, doit correspondre exactement à ce qui est configuré côté DSI).
+- **Connexion par mot de passe (transitoire)** : pour un déploiement avec de vrais comptes
+  **avant** que le SSO ne soit branché, sans attendre la DSI. Tant que `/connexion` affichait la
+  liste des comptes à choisir (mode démonstration), n'importe qui pouvait se connecter à la
+  place de n'importe qui, sans mot de passe — ⚠️ **à n'utiliser qu'avec des comptes fictifs**.
+  Activer « Connexion par mot de passe » (page *Étudiants et affectations*) remplace cette liste
+  par un vrai formulaire email + mot de passe. Chaque personne a besoin d'un mot de passe défini
+  par l'administrateur sur sa fiche de compte (aucun courriel n'est envoyé automatiquement : à
+  communiquer directement) ; elle peut ensuite le changer elle-même sur *Mon compte*. Ce réglage
+  se désactive automatiquement (masqué) une fois le SSO configuré (`OIDC_*` renseignées).
 
 **Sur le serveur Linux (Ubuntu)** :
 

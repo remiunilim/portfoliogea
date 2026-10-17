@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
-import { FormPreferences } from "@/components/admin";
-import { envoiMailsActif, getUtilisateur, listerEtudiants } from "@/lib/db";
+import { FormChangerMotDePasse, FormPreferences } from "@/components/admin";
+import { connexionParMotDePasseActive, envoiMailsActif, getUtilisateur, listerEtudiants } from "@/lib/db";
 import { estEnseignant, utilisateurCourant } from "@/lib/session";
 
 export default async function MonCompte() {
@@ -12,6 +12,7 @@ export default async function MonCompte() {
   const nbSuivis = enseignant ? (await listerEtudiants({ referentId: u.id })).length : 0;
   const emailProvisoire = u.email.endsWith(".a-renseigner");
   const mailsActifs = await envoiMailsActif();
+  const mdpActif = await connexionParMotDePasseActive();
 
   return (
     <>
@@ -45,6 +46,13 @@ export default async function MonCompte() {
             </p>
           )}
         </section>
+
+        {mdpActif && (
+          <section className="mt-6 rounded-xl border border-line bg-surface p-5">
+            <h2 className="mb-3 text-base font-semibold">Mot de passe</h2>
+            <FormChangerMotDePasse />
+          </section>
+        )}
       </main>
     </>
   );
