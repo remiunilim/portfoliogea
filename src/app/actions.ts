@@ -584,3 +584,43 @@ export async function passageGroupe(_: EtatPassage, formData: FormData): Promise
   };
 }
 
+// ---------- Archivage et suppression groupés ----------
+
+export type EtatArchivage = { ok: boolean; message: string } | null;
+
+const PHRASE_CONFIRMATION_SUPPRESSION = "SUPPRIMER";
+
+export async function archivageGroupe(_: EtatArchivage, formData: FormData): Promise<EtatArchivage> {
+  const admin = await exigerAdmin();
+  if (!admin) return { ok: false, message: "Réservé à l'administrateur." };
+  const ids = formData.getAll("etudiants").map(String);
+  if (ids.length === 0) return { ok: false, message: "Sélectionnez au moins un·e étudiant·e." };
+  const operation = formData.get("operation");
+
+  if (operation === "archiver") {
+    for (const id of ids) {
+      await changerActivation(id, false);
+      await journaliser({ etudiant_id: id, acteur_id: admin.id, annee: null, competence: null, type: "compte_modifie", detail: "archivé (sortie de formation ou de cohorte)" });
+    }
+    refresh();
+    return { ok: true, message: `${ids.length} étudiant(s) archivé(s) : accès fermé, portfolios conservés.` };
+  }
+
+  if (operation === "supprimer") {
+    if (texte(formData, "confirmation").toUpperCase() !== PHRASE_CONFIRMATION_SUPPRESSION) {
+      return { ok: false, message: `Pour confirmer, tapez « ${PHRASE_CONFIRMATION_SUPPRESSION} » exactement.` };
+    }
+    let supprimes = 0;
+    for (const id of ids) {
+      const e = await getUtilisateur(id);
+      if (!e || e.role !== "etudiant" || e.id === admin.id) continue;
+      await supprimerEtudiant(id);
+      supprimes++;
+    }
+    refresh();
+    return { ok: true, message: `${supprimes} étudiant(s) supprimé(s) définitivement, portfolios compris.` };
+  }
+
+  return { ok: false, message: "Opération inconnue." };
+}
+

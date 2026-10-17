@@ -31,6 +31,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   - affectation des référents, étudiant par étudiant ;
   - fiche de chaque compte : modification (identité, email, année, parcours, groupe, référent, droits), désactivation (sortie de formation, départ : accès fermé, données conservées), suppression définitive (un étudiant avec tout son portfolio ; un enseignant seulement s'il n'a laissé aucune évaluation ni action), avec saisie du nom pour confirmer ;
   - **passage d'année et réaffectations groupés** (page dédiée) : filtre par année, par référent ou par nom, sélection multiple, puis changement d'année (« année suivante » ou année précise), de parcours, de référent ou de groupe ; désactivation groupée en fin de formation. Chaque changement est inscrit dans le journal de l'étudiant.
+  - **archivage et suppression groupés** (page dédiée *Archivage et suppression*) : même filtre par année/référent/nom pour viser une cohorte entière (ou un·e seul·e étudiant·e), puis archivage (accès fermé, portfolio conservé) ou suppression définitive de tous les portfolios sélectionnés — cette dernière demande de taper « SUPPRIMER » pour confirmer, après avoir affiché la liste exacte des personnes concernées.
 - **Notifications** : l'étudiant est prévenu dans l'outil (cloche dans l'en-tête) dès qu'une évaluation est publiée ; le référent, dès qu'un de ses étudiants dépose ou modifie un argumentaire, une trace ou sa présentation (une seule notification par dépôt tant qu'elle n'est pas lue). Chacun choisit sur sa page *Mon compte* (clic sur son nom) de recevoir aussi un courriel : à chaque fois, en récapitulatif quotidien (enseignants) ou jamais. Les courriels sont placés dans une file d'attente et expédiés par SMTP (voir `.env.example`) — **mais l'envoi réel reste coupé pour tout le monde tant que l'administrateur ne l'a pas activé** (page *Étudiants et affectations*, section « Envoi des courriels ») : par défaut, personne n'en reçoit, et la préférence de chacun est verrouillée sur *Mon compte* en attendant.
 - **Export PDF** : l'onglet *Portfolio complet* produit un seul PDF qui contient, dans l'ordre :
   - une couverture et un sommaire paginé ;
@@ -59,6 +60,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 | `src/app/admin/affectations` | Import, ajout de comptes, affectation des référents |
 | `src/app/admin/comptes/[id]` | Fiche d'un compte : modification, désactivation, suppression |
 | `src/app/admin/passage` | Passage d'année et réaffectations groupés |
+| `src/app/admin/archivage` | Archivage ou suppression définitive, par étudiant·e ou par cohorte (filtre par année) |
 | `src/app/compte` | Mon compte : préférence de notification par courriel |
 | `src/app/fichiers/[id]`, `src/app/export/[etudiantId]` | Accès contrôlé aux traces et à l'export PDF |
 

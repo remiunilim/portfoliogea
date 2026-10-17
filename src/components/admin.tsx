@@ -5,6 +5,7 @@ import { startTransition, useActionState, useMemo, useState } from "react";
 import {
   ajouterEnseignant,
   ajouterEtudiant,
+  archivageGroupe,
   changerActivationAction,
   enregistrerPreferences,
   importerEtudiants,
@@ -604,6 +605,192 @@ export function FormPassage({ etudiants, enseignants, parcours }: { etudiants: E
           <div role="status" className={`rounded-md p-3 text-sm ${etat.ok ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-800"}`}>
             {etat.message}
             {etat.ignores && etat.ignores.length > 0 && <div className="mt-1 text-xs">Ignorés : {etat.ignores.join(", ")}</div>}
+          </div>
+        )}
+      </aside>
+    </form>
+  );
+}
+
+// ---------- Archivage et suppression groupés (étudiants ou cohortes entières) ----------
+
+const PHRASE_CONFIRMATION_SUPPRESSION = "SUPPRIMER";
+
+export function FormArchivage({ etudiants, enseignants }: { etudiants: EtudiantPassage[]; enseignants: Option[] }) {
+  const [etat, action, enCours] = useActionState(archivageGroupe, null);
+  const [filtreAnnee, setFiltreAnnee] = useState<number | 0>(0);
+  const [filtreReferent, setFiltreReferent] = useState("");
+  const [recherche, setRecherche] = useState("");
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [confirmationSuppression, setConfirmationSuppression] = useState("");
+
+  const visibles = useMemo(
+    () =>
+      etudiants.filter(
+        (e) =>
+          (!filtreAnnee || e.annee === filtreAnnee) &&
+          (!filtreReferent || (filtreReferent === "__aucun" ? !e.referentId : e.referentId === filtreReferent)) &&
+          (!recherche || e.nom.toLowerCase().includes(recherche.toLowerCase())),
+      ),
+    [etudiants, filtreAnnee, filtreReferent, recherche],
+  );
+  const tousCoches = visibles.length > 0 && visibles.every((e) => selection.has(e.id));
+  const basculer = (id: string) =>
+    setSelection((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const basculerTous = () =>
+    setSelection((s) => {
+      const n = new Set(s);
+      for (const e of visibles) {
+        if (tousCoches) n.delete(e.id);
+        else n.add(e.id);
+      }
+      return n;
+    });
+  const envoyer = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const donnees = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+    for (const id of selection) donnees.append("etudiants", id);
+    startTransition(() => action(donnees));
+    setSelection(new Set());
+    setConfirmationSuppression("");
+  };
+  const selectionnes = etudiants.filter((e) => selection.has(e.id));
+  const nbSel = selectionnes.length;
+
+  return (
+    <form onSubmit={envoyer} className="grid gap-6 lg:grid-cols-[1fr_340px]">
+      <section className="min-w-0 rounded-xl border border-line bg-surface">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line p-3 text-sm">
+          <div className="flex gap-1 rounded-lg border border-line p-1">
+            {[0, 1, 2, 3].map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => setFiltreAnnee(a)}
+                aria-pressed={filtreAnnee === a}
+                className={`rounded-md px-3 py-1 ${filtreAnnee === a ? "bg-primary text-white" : "hover:bg-primary-soft"}`}
+              >
+                {a ? `BUT${a}` : "Toutes"}
+              </button>
+            ))}
+          </div>
+          <select value={filtreReferent} onChange={(e) => setFiltreReferent(e.target.value)} aria-label="Filtrer par référent" className="rounded-md border border-line bg-surface px-2 py-1.5">
+            <option value="">Tous les référents</option>
+            <option value="__aucun">Sans référent</option>
+            {enseignants.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nom}
+              </option>
+            ))}
+          </select>
+          <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher un nom" aria-label="Rechercher" className="min-w-0 flex-1 rounded-md border border-line bg-surface px-2 py-1.5" />
+        </div>
+        <div className="max-h-[560px] overflow-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead className="sticky top-0 bg-surface text-left text-xs text-muted">
+              <tr className="border-b border-line">
+                <th className="w-10 px-3 py-2">
+                  <input type="checkbox" checked={tousCoches} onChange={basculerTous} aria-label="Tout sélectionner (la cohorte filtrée)" className="accent-[var(--primary)]" />
+                </th>
+                <th className="px-3 py-2 font-medium">Étudiant·e</th>
+                <th className="px-3 py-2 font-medium">Année</th>
+                <th className="px-3 py-2 font-medium">Parcours</th>
+                <th className="px-3 py-2 font-medium">Groupe</th>
+                <th className="px-3 py-2 font-medium">Référent</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibles.map((e) => (
+                <tr key={e.id} className={`border-b border-line last:border-0 ${selection.has(e.id) ? "bg-primary-soft/60" : ""}`}>
+                  <td className="px-3 py-2">
+                    <input type="checkbox" checked={selection.has(e.id)} onChange={() => basculer(e.id)} aria-label={`Sélectionner ${e.nom}`} className="accent-[var(--primary)]" />
+                  </td>
+                  <td className="px-3 py-2 font-medium">{e.nom}</td>
+                  <td className="px-3 py-2">BUT{e.annee}</td>
+                  <td className="px-3 py-2">{e.parcours}</td>
+                  <td className="px-3 py-2">{e.groupe || "—"}</td>
+                  <td className="px-3 py-2">{e.referent || <span className="text-amber-700">aucun</span>}</td>
+                </tr>
+              ))}
+              {visibles.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-muted">
+                    Aucun étudiant pour ce filtre.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside className="h-fit space-y-5 rounded-xl border border-line bg-surface p-5 lg:sticky lg:top-4">
+        <div>
+          <h2 className="text-base font-semibold">
+            {nbSel} étudiant{nbSel > 1 ? "s" : ""} sélectionné{nbSel > 1 ? "s" : ""}
+          </h2>
+          <p className="mt-1 text-xs text-muted">
+            Filtrez par année pour sélectionner une cohorte entière (case « Tout sélectionner » en tête de tableau), ou cochez
+            un·e étudiant·e à la fois.
+          </p>
+          {nbSel > 0 && (
+            <button type="button" onClick={() => setSelection(new Set())} className="mt-1 text-xs text-primary hover:underline">
+              Vider la sélection
+            </button>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-line bg-background p-3">
+          <p className="mb-2 text-sm font-medium">Archiver (sortie de formation ou de cohorte)</p>
+          <p className="mb-3 text-xs text-muted">L&apos;accès est fermé, le portfolio est conservé et reste exportable.</p>
+          <button name="operation" value="archiver" className={`${boutonSecondaire} w-full`} disabled={enCours || nbSel === 0}>
+            Archiver {nbSel > 0 ? `${nbSel} étudiant${nbSel > 1 ? "s" : ""}` : "la sélection"}
+          </button>
+        </div>
+
+        <div className="rounded-lg border border-red-200 bg-red-50/40 p-3">
+          <p className="mb-2 text-sm font-medium text-red-800">Supprimer définitivement</p>
+          <p className="mb-3 text-xs text-red-800">
+            Efface pour toujours les portfolios sélectionnés (traces, argumentaires, évaluations, journal). Irréversible :
+            exportez les PDF avant si nécessaire.
+          </p>
+          {nbSel > 0 && (
+            <ul className="mb-3 max-h-24 overflow-auto text-xs text-red-900">
+              {selectionnes.map((e) => (
+                <li key={e.id}>• {e.nom}</li>
+              ))}
+            </ul>
+          )}
+          <label className="mb-3 block text-sm">
+            <span className="mb-1 block text-xs text-red-800">
+              Pour confirmer, tapez <strong>{PHRASE_CONFIRMATION_SUPPRESSION}</strong>
+            </span>
+            <input
+              name="confirmation"
+              value={confirmationSuppression}
+              onChange={(e) => setConfirmationSuppression(e.target.value)}
+              autoComplete="off"
+              className={champ}
+            />
+          </label>
+          <button
+            name="operation"
+            value="supprimer"
+            className="w-full rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={enCours || nbSel === 0 || confirmationSuppression.toUpperCase() !== PHRASE_CONFIRMATION_SUPPRESSION}
+          >
+            Supprimer {nbSel > 0 ? `${nbSel} étudiant${nbSel > 1 ? "s" : ""}` : "la sélection"}
+          </button>
+        </div>
+
+        {etat && (
+          <div role="status" className={`rounded-md p-3 text-sm ${etat.ok ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-800"}`}>
+            {etat.message}
           </div>
         )}
       </aside>
