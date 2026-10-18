@@ -43,6 +43,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 
   Chaque page de trace porte en pied de page une étiquette qui situe la trace dans le portfolio.
 - **Export Excel des notes** : sur la page *Mes étudiants* / *Suivi des portfolios*, chaque enseignant·e exporte les notes (brouillons et publiées) de ses étudiants, une feuille par année de BUT ; l'administrateur exporte tous les étudiants, ou un sous-ensemble filtré par référent ou parcours.
+- **Transfert entre instances** (page *Transfert entre instances*, lien depuis *Étudiants et affectations*) : exporte en un seul fichier .zip tous les comptes et portfolios de cette instance (y compris les PDF déposés), pour les importer sur une autre installation de Folio GEA — utile par exemple pour faire basculer les données de la version OVH vers la version DSI une fois celle-ci déployée. Les comptes déjà présents sur la destination (même adresse mail) sont reconnus et jamais écrasés ; seuls les comptes, portfolios et évaluations absents sont ajoutés. ⚠️ Réimporter deux fois le même export duplique les traces (fichiers PDF) : à n'utiliser qu'une seule fois par export, ou en acceptant ce doublon.
 - **Journal** : chaque dépôt, modification, évaluation ou publication est tracé (qui, quoi, quand). Pour les fichiers, seule la dernière version est conservée.
 
 ## Organisation du code
@@ -55,6 +56,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 | `src/lib/lien-connexion.ts`, `src/app/connexion/lien`, `src/app/connexion/creer-profil`, `src/components/connexion.tsx` | Connexion par lien envoyé par mail et auto-inscription étudiant·e (jeton à usage unique, 20 min) |
 | `src/lib/export-pdf.ts` | Assemblage du portfolio en un seul PDF (pdf-lib) |
 | `src/lib/export-notes.ts`, `src/app/enseignant/export` | Export Excel des notes (ExcelJS) |
+| `src/lib/transfert.ts`, `src/app/admin/transfert` | Transfert de toutes les données vers/depuis une autre instance (export/import .zip, JSZip) |
 | `src/lib/mail.ts`, `src/lib/courriels.ts` | Envoi SMTP et vidage de la file de courriels (`src/app/api/cron/courriels`, déclenché périodiquement, voir `deploy/`) |
 | `src/lib/import-etudiants.ts` | Lecture, contrôle et application de l'import des listes d'étudiants (ExcelJS), modèle Excel |
 | `src/app/notifications` | Notifications de l'utilisateur |

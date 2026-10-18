@@ -42,6 +42,7 @@ import {
 } from "@/lib/db";
 import { analyserImport, appliquerImport, lireFichier, PARCOURS_GEA, type LigneApercu } from "@/lib/import-etudiants";
 import { consommerJetonInscription, emailDuJetonInscription, envoyerLienConnexion } from "@/lib/lien-connexion";
+import { appliquerImportZip } from "@/lib/transfert";
 import { COOKIE_SESSION, estAdmin, estEnseignant, peutModifier, suitEtudiant, utilisateurCourant } from "@/lib/session";
 import {
   competenceParCode,
@@ -421,6 +422,32 @@ export async function definirEnvoiMailsActifAction(formData: FormData) {
   if (!estAdmin(u)) return;
   await definirEnvoiMailsActif(formData.get("actif") === "1");
   refresh();
+}
+
+// ---------- Transfert de données vers/depuis une autre instance (voir /admin/transfert) ----------
+
+export async function importerDonneesAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
+  if (!estAdmin(await utilisateurCourant())) return { ok: false, message: "Réservé à l'administrateur." };
+  if (texte(formData, "confirmation").toUpperCase() !== "IMPORTER") {
+    return { ok: false, message: "Pour confirmer, saisissez IMPORTER." };
+  }
+  const fichier = formData.get("fichier");
+  if (!(fichier instanceof File) || fichier.size === 0) {
+    return { ok: false, message: "Choisissez un fichier .zip exporté depuis une autre instance de Folio GEA." };
+  }
+  try {
+    const rapport = await appliquerImportZip(Buffer.from(await fichier.arrayBuffer()));
+    refresh();
+    const avertissement = rapport.tracesManquantes.length
+      ? ` ${rapport.tracesManquantes.length} trace(s) sans fichier PDF retrouvé dans l'archive.`
+      : "";
+    return {
+      ok: true,
+      message: `Import terminé : ${rapport.comptesCrees} compte(s) créé(s), ${rapport.comptesReconnus} déjà présent(s) (reconnu par email, non modifié), ${rapport.tracesCopiees} trace(s) copiée(s).${avertissement}`,
+    };
+  } catch (e) {
+    return { ok: false, message: `Échec de l'import : ${e instanceof Error ? e.message : "erreur inconnue"}.` };
+  }
 }
 
 export async function ajouterEtudiant(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {

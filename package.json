@@ -10,9 +10,10 @@
   },
   "dependencies": {
     "exceljs": "^4.4.0",
+    "jszip": "^3.10.2",
     "mysql2": "^3.11.0",
-    "nodemailer": "^6.9.16",
     "next": "16.3.8",
+    "nodemailer": "^6.9.16",
     "pdf-lib": "^1.17.1",
     "react": "19.2.8",
     "react-dom": "19.2.8"
