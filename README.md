@@ -81,6 +81,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   - `deploy/apache-folio-gea.conf` : site Apache (reverse proxy + HTTPS)
   - `deploy/folio-gea.service` : service systemd (lance `next start`) — bien suivre l'ordre des commandes dans ses commentaires : le dossier `data/` doit exister (avec les bons droits) **avant** le premier démarrage, sinon le service échoue (erreur systemd 226/NAMESPACE)
   - `deploy/folio-gea-courriels.service`/`.timer` et `deploy/folio-gea-courriels-quotidien.service`/`.timer` : vidage périodique de la file de courriels
+  - `deploy/mettre-a-jour.sh` : met à jour vers la dernière version poussée sur GitHub (`sudo deploy/mettre-a-jour.sh`, depuis le serveur) — voir « Mettre à jour une installation existante » plus bas
 - **Connexion SSO OpenID Connect** : faite (`src/lib/oidc.ts`, routes `src/app/connexion/oidc`), mais **pas encore testée avec le vrai fournisseur de la DSI** — en attente de ses réglages. Tant que `OIDC_ISSUER` (et les autres variables `OIDC_*` de `.env.example`) ne sont pas renseignées, `/connexion` reste en mode démonstration (choix d'un compte fictif) ; dès qu'elles le sont, elle affiche un seul bouton « Se connecter avec le compte de l'université ». Au premier vrai login, le compte est reconnu par son **email** (celui déjà enregistré via l'import Excel ou l'ajout manuel) puis l'identifiant OpenID Connect y est lié pour les connexions suivantes. **Aucun compte n'est créé automatiquement** : un compte universitaire inconnu de Folio GEA affiche un message invitant à contacter l'administrateur (l'étudiant·e ou l'enseignant·e doit déjà avoir été importé·e ou ajouté·e). À demander à la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, et l'URL de retour à déclarer chez eux (`OIDC_REDIRECT_URI`, doit correspondre exactement à ce qui est configuré côté DSI).
 - **Connexion par mot de passe (transitoire)** : pour un déploiement avec de vrais comptes
   **avant** que le SSO ne soit branché, sans attendre la DSI. Tant que `/connexion` affichait la
@@ -100,6 +101,16 @@ node -v                                              # 22.5 minimum
 npm install
 npm run build && npm run start                       # ou via le service systemd (deploy/folio-gea.service)
 ```
+
+## Mettre à jour une installation existante
+
+Une mise à jour (nouvelle fonctionnalité, correction) ne touche jamais aux étudiants ni à leurs portfolios : seul le code de l'application change, jamais la base MariaDB ni les PDF déposés (`data/`). Pour l'appliquer sur le serveur :
+
+```bash
+sudo deploy/mettre-a-jour.sh
+```
+
+Ce script récupère la dernière version sur GitHub (`git pull`), réinstalle les dépendances si besoin, recompile et redémarre le service. Par prudence avant une mise à jour importante, une sauvegarde rapide de la base reste une bonne habitude : `mysqldump -u folio_gea -p folio_gea > sauvegarde-$(date +%Y%m%d).sql`.
 
 ## Reporté aux étapes suivantes
 
