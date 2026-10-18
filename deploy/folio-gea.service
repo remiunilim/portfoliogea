@@ -1,10 +1,15 @@
 # Modèle de service systemd pour Folio GEA (Next.js lancé en arrière-plan, derrière Apache).
-# À adapter puis copier dans /etc/systemd/system/folio-gea.service sur le serveur de la DSI.
+# À adapter puis copier dans /etc/systemd/system/folio-gea.service.
 #
-# Installation :
+# Installation (cloner directement sur le serveur, pour pouvoir mettre à jour avec
+# deploy/mettre-a-jour.sh ensuite) :
 #   sudo useradd --system --home /srv/folio-gea --shell /usr/sbin/nologin folio-gea
-#   sudo cp -r <projet> /srv/folio-gea && sudo chown -R folio-gea:folio-gea /srv/folio-gea
-#   cd /srv/folio-gea && sudo -u folio-gea npm ci && sudo -u folio-gea npm run build
+#   sudo git clone -b ovh https://github.com/remiunilim/portfoliogea.git /srv/folio-gea
+#   # (branche ovh pour cette variante ; main pour la branche DSI)
+#   sudo chown -R folio-gea:folio-gea /srv/folio-gea
+#   cd /srv/folio-gea && sudo -u folio-gea cp .env.example .env.local
+#   # puis renseigner .env.local (DB_*, APP_BASE_URL, SMTP_*, EMAIL_ETUDIANTS_DOMAINES)
+#   sudo -u folio-gea npm ci && sudo -u folio-gea npm run build
 #   # Le dossier data/ doit exister AVANT le premier démarrage : ReadWritePaths ci-dessous
 #   # échoue sinon (erreur systemd 226/NAMESPACE), même si l'application le crée normalement
 #   # elle-même au premier lancement.
@@ -12,6 +17,9 @@
 #   sudo cp deploy/folio-gea.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now folio-gea
+#
+# Mise à jour vers une nouvelle version (après un nouveau développement) :
+#   sudo deploy/mettre-a-jour.sh
 
 [Unit]
 Description=Folio GEA (Next.js)

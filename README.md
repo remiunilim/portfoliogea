@@ -101,8 +101,19 @@ npm run build && npm run start                       # ou via le service systemd
 
 Modèles prêts à adapter dans `deploy/` (**vérifiés en conditions réelles** sur un Linux de test — build de production, service `folio-gea` démarré par systemd, relais Apache fonctionnel de bout en bout) :
 - `deploy/apache-folio-gea.conf` : site Apache (reverse proxy + HTTPS)
-- `deploy/folio-gea.service` : service systemd (lance `next start`) — bien suivre l'ordre des commandes dans ses commentaires : le dossier `data/` doit exister (avec les bons droits) **avant** le premier démarrage, sinon le service échoue (erreur systemd 226/NAMESPACE)
+- `deploy/folio-gea.service` : service systemd (lance `next start`) — bien suivre l'ordre des commandes dans ses commentaires : le dossier `data/` doit exister (avec les bons droits) **avant** le premier démarrage, sinon le service échoue (erreur systemd 226/NAMESPACE). Installation recommandée par `git clone` directement sur le serveur (plutôt que copier le dossier), pour pouvoir mettre à jour avec `git pull` ensuite.
+- `deploy/mettre-a-jour.sh` : met à jour vers la dernière version poussée sur GitHub (`sudo deploy/mettre-a-jour.sh`, depuis le serveur). Ne touche **jamais** à la base MariaDB ni aux PDF déposés (`data/`) : le code de l'application et les données sont séparés, une mise à jour ne fait que remplacer les fichiers du programme et redémarrer le service. Si une nouvelle fonctionnalité ajoute une colonne ou une table, l'application la crée elle-même au redémarrage, sans rien effacer de ce qui existe déjà.
 - `deploy/folio-gea-courriels.service`/`.timer` et `deploy/folio-gea-courriels-quotidien.service`/`.timer` : vidage périodique de la file des courriels de *notification* (sans effet sur la connexion, envoyée immédiatement)
+
+## Mettre à jour une installation existante
+
+Une mise à jour (nouvelle fonctionnalité, correction) ne touche jamais aux étudiants ni à leurs portfolios : seul le code de l'application change, jamais la base MariaDB ni les PDF déposés (`data/`). Pour l'appliquer sur le serveur :
+
+```bash
+sudo deploy/mettre-a-jour.sh
+```
+
+Ce script récupère la dernière version sur GitHub (`git pull`), réinstalle les dépendances si besoin, recompile et redémarre le service. Par prudence avant une mise à jour importante, une sauvegarde rapide de la base reste une bonne habitude : `mysqldump -u folio_gea -p folio_gea > sauvegarde-$(date +%Y%m%d).sql`.
 
 ## Reporté aux étapes suivantes
 
