@@ -136,6 +136,13 @@ function obtenirPool(): Promise<Pool> {
 }
 
 async function creerSchema(pool: Pool) {
+  // Détecté avant la création des tables : sert à savoir si la table « depots » vient d'apparaître
+  // (mise à jour depuis une version antérieure à la fonctionnalité brouillon/publication), pour la
+  // migration de données ci-dessous.
+  const [[{ n: depotsExistait }]] = (await pool.query(
+    "SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'depots'",
+  )) as [{ n: number }[], unknown];
+
   const tables = [
     `CREATE TABLE IF NOT EXISTS utilisateurs (
       id VARCHAR(64) PRIMARY KEY,
@@ -155,7 +162,20 @@ async function creerSchema(pool: Pool) {
       etudiant_id VARCHAR(64) PRIMARY KEY REFERENCES utilisateurs(id),
       texte TEXT NOT NULL,
       projet_pro TEXT NOT NULL,
-      maj_le VARCHAR(32) NOT NULL
+      maj_le VARCHAR(32) NOT NULL,
+      publie_le VARCHAR(32)
+    ) ENGINE=InnoDB`,
+    // Marque qu'un·e étudiant·e a publié (rendu visible au référent) sa présentation ou une
+    // compétence donnée : tant qu'il n'y a pas de ligne ici, le dépôt reste un brouillon privé,
+    // invisible de l'enseignant·e (tableau de suivi, fiche, export). Une fois publiée, toute
+    // modification ultérieure du brouillon reste visible sans qu'il faille republier (l'enseignant·e
+    // la repère via l'indicateur « modifié depuis votre dernière visite » déjà existant).
+    `CREATE TABLE IF NOT EXISTS depots (
+      etudiant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      annee TINYINT NOT NULL,
+      competence VARCHAR(10) NOT NULL,
+      publie_le VARCHAR(32) NOT NULL,
+      PRIMARY KEY (etudiant_id, annee, competence)
     ) ENGINE=InnoDB`,
     `CREATE TABLE IF NOT EXISTS argumentaires (
       etudiant_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
@@ -260,6 +280,29 @@ async function creerSchema(pool: Pool) {
   await pool.query("ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS identifiant_oidc VARCHAR(255) UNIQUE");
   await pool.query("ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mot_de_passe_hash VARCHAR(255)");
   await pool.query("ALTER TABLE courriels ADD COLUMN IF NOT EXISTS envoye_le VARCHAR(32)");
+  await pool.query("ALTER TABLE presentations ADD COLUMN IF NOT EXISTS publie_le VARCHAR(32)");
+
+  // Mise en place du choix brouillon/publication (voir la table « depots » ci-dessus) : les dépôts
+  // et présentations déjà déposés avant cette mise à jour ont forcément déjà été vus par le
+  // référent (certains même déjà évalués) — on les marque donc publiés d'emblée, pour ne rien
+  // masquer rétroactivement. Seuls les dépôts créés après cette mise à jour suivront le choix
+  // brouillon/publier. Ne s'exécute qu'une fois, à l'apparition de la table.
+  if (!depotsExistait) {
+    const maintenantIso = maintenant();
+    await pool.query(
+      `INSERT INTO depots (etudiant_id, annee, competence, publie_le)
+       SELECT DISTINCT etudiant_id, annee, competence, ? FROM argumentaires WHERE TRIM(texte) <> ''
+       ON DUPLICATE KEY UPDATE publie_le = publie_le`,
+      [maintenantIso],
+    );
+    await pool.query(
+      `INSERT INTO depots (etudiant_id, annee, competence, publie_le)
+       SELECT DISTINCT etudiant_id, annee, competence, ? FROM traces
+       ON DUPLICATE KEY UPDATE publie_le = publie_le`,
+      [maintenantIso],
+    );
+    await pool.query("UPDATE presentations SET publie_le = ? WHERE publie_le IS NULL", [maintenantIso]);
+  }
 }
 
 const maintenant = () => new Date().toISOString();
@@ -352,7 +395,24 @@ export async function definirReferent(etudiantId: string, referentId: string | n
 export async function getPresentation(etudiantId: string) {
   const pool = await obtenirPool();
   const [lignes] = await pool.query("SELECT * FROM presentations WHERE etudiant_id = ?", [etudiantId]);
-  return (lignes as { etudiant_id: string; texte: string; projet_pro: string; maj_le: string }[])[0];
+  return (lignes as { etudiant_id: string; texte: string; projet_pro: string; maj_le: string; publie_le: string | null }[])[0];
+}
+
+// Compétences (et présentation) qu'un·e étudiant·e a publiées, rendues visibles à son référent.
+// Tant qu'une compétence n'y figure pas, son dépôt (argumentaire, traces) reste un brouillon privé.
+export async function getDepots(etudiantId: string): Promise<{ annee: number; competence: string; publie_le: string }[]> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query("SELECT annee, competence, publie_le FROM depots WHERE etudiant_id = ?", [etudiantId]);
+  return lignes as { annee: number; competence: string; publie_le: string }[];
+}
+
+export async function publierDepot(etudiantId: string, annee: number, competence: string) {
+  const pool = await obtenirPool();
+  await pool.query(
+    `INSERT INTO depots (etudiant_id, annee, competence, publie_le) VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE publie_le = VALUES(publie_le)`,
+    [etudiantId, annee, competence, maintenant()],
+  );
 }
 
 export async function getArgumentaires(etudiantId: string): Promise<Argumentaire[]> {
@@ -449,6 +509,11 @@ export async function enregistrerPresentation(etudiantId: string, texte: string,
      ON DUPLICATE KEY UPDATE texte = VALUES(texte), projet_pro = VALUES(projet_pro), maj_le = VALUES(maj_le)`,
     [etudiantId, texte, projetPro, maintenant()],
   );
+}
+
+export async function publierPresentation(etudiantId: string) {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE presentations SET publie_le = ? WHERE etudiant_id = ?", [maintenant(), etudiantId]);
 }
 
 export async function enregistrerArgumentaire(etudiantId: string, annee: number, competence: string, texte: string) {
@@ -1341,7 +1406,8 @@ export type DonneesTransfert = {
   version: 1;
   exporte_le: string;
   utilisateurs: Utilisateur[];
-  presentations: { etudiant_id: string; texte: string; projet_pro: string; maj_le: string }[];
+  presentations: { etudiant_id: string; texte: string; projet_pro: string; maj_le: string; publie_le: string | null }[];
+  depots: { etudiant_id: string; annee: number; competence: string; publie_le: string }[];
   argumentaires: Argumentaire[];
   traces: Trace[];
   evaluations: Evaluation[];
@@ -1358,7 +1424,8 @@ export async function exporterToutesLesDonnees(): Promise<DonneesTransfert> {
     utilisateurs: await requete<Utilisateur>(
       "SELECT id, nom, prenom, email, role, annee_but, groupe, parcours, referent_id, actif, pref_courriel FROM utilisateurs",
     ),
-    presentations: await requete("SELECT etudiant_id, texte, projet_pro, maj_le FROM presentations"),
+    presentations: await requete("SELECT etudiant_id, texte, projet_pro, maj_le, publie_le FROM presentations"),
+    depots: await requete("SELECT etudiant_id, annee, competence, publie_le FROM depots"),
     argumentaires: await requete<Argumentaire>("SELECT etudiant_id, annee, competence, texte, maj_le FROM argumentaires"),
     traces: await requete<Trace>(
       "SELECT id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le FROM traces",
@@ -1436,9 +1503,19 @@ export async function importerToutesLesDonnees(
       const id = remap.get(p.etudiant_id);
       if (!id) continue;
       await conn.query(
-        `INSERT INTO presentations (etudiant_id, texte, projet_pro, maj_le) VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE texte = VALUES(texte), projet_pro = VALUES(projet_pro), maj_le = VALUES(maj_le)`,
-        [id, p.texte, p.projet_pro, p.maj_le],
+        `INSERT INTO presentations (etudiant_id, texte, projet_pro, maj_le, publie_le) VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE texte = VALUES(texte), projet_pro = VALUES(projet_pro), maj_le = VALUES(maj_le), publie_le = VALUES(publie_le)`,
+        [id, p.texte, p.projet_pro, p.maj_le, p.publie_le],
+      );
+    }
+
+    for (const d of donnees.depots ?? []) {
+      const id = remap.get(d.etudiant_id);
+      if (!id) continue;
+      await conn.query(
+        `INSERT INTO depots (etudiant_id, annee, competence, publie_le) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE publie_le = VALUES(publie_le)`,
+        [id, d.annee, d.competence, d.publie_le],
       );
     }
 

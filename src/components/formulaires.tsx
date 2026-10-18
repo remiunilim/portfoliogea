@@ -39,7 +39,7 @@ function Compteur({ texte }: { texte: string }) {
 
 // ---------- Présentation ----------
 
-export function FormPresentation(props: { etudiantId: string; texte: string; projetPro: string }) {
+export function FormPresentation(props: { etudiantId: string; texte: string; projetPro: string; publiee: boolean }) {
   const [etat, action, enCours] = useActionConservee(sauverPresentation, null);
   const [texte, setTexte] = useState(props.texte);
   return (
@@ -68,12 +68,26 @@ export function FormPresentation(props: { etudiantId: string; texte: string; pro
           placeholder="Le métier ou le secteur visé, la poursuite d'études envisagée…"
         />
       </label>
-      <div className="flex items-center gap-3">
-        <button className={bouton} disabled={enCours}>
-          {enCours ? "Enregistrement…" : "Enregistrer"}
-        </button>
+      <div className="flex flex-wrap items-center gap-2">
+        {props.publiee ? (
+          <button className={bouton} disabled={enCours}>
+            {enCours ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        ) : (
+          <>
+            <button className={boutonSecondaire} disabled={enCours}>
+              Enregistrer le brouillon
+            </button>
+            <button name="publier" value="1" className={bouton} disabled={enCours}>
+              {enCours ? "Enregistrement…" : "Enregistrer et publier à mon référent"}
+            </button>
+          </>
+        )}
         <Retour etat={etat} />
       </div>
+      {!props.publiee && (
+        <p className="text-xs text-muted">Brouillon : invisible par votre référent jusqu&apos;à ce que vous publiiez.</p>
+      )}
     </form>
   );
 }
@@ -92,7 +106,7 @@ function ChampsCellule({ etudiantId, annee, competence }: Cellule) {
   );
 }
 
-export function FormArgumentaire(props: Cellule & { texte: string }) {
+export function FormArgumentaire(props: Cellule & { texte: string; publie: boolean }) {
   const [etat, action, enCours] = useActionConservee(sauverArgumentaire, null);
   const [texte, setTexte] = useState(props.texte);
   const modifie = texte !== props.texte;
@@ -108,13 +122,29 @@ export function FormArgumentaire(props: Cellule & { texte: string }) {
         placeholder="Décrivez la situation, ce que vous avez fait, ce que vous en avez appris, et en quoi vos traces en témoignent…"
       />
       <div className="flex flex-wrap items-center gap-3">
-        <button className={bouton} disabled={enCours || !modifie}>
-          {enCours ? "Enregistrement…" : "Enregistrer l'argumentaire"}
-        </button>
+        {props.publie ? (
+          <button className={bouton} disabled={enCours || !modifie}>
+            {enCours ? "Enregistrement…" : "Enregistrer l'argumentaire"}
+          </button>
+        ) : (
+          <>
+            <button className={boutonSecondaire} disabled={enCours || !modifie}>
+              Enregistrer le brouillon
+            </button>
+            <button name="publier" value="1" className={bouton} disabled={enCours}>
+              {enCours ? "Enregistrement…" : "Enregistrer et publier à mon référent"}
+            </button>
+          </>
+        )}
         <Compteur texte={texte} />
         {modifie && !enCours && <span className="text-xs text-amber-700">Modifications non enregistrées</span>}
         <Retour etat={etat} />
       </div>
+      {!props.publie && (
+        <p className="text-xs text-muted">
+          Brouillon : l&apos;argumentaire et les traces de cette compétence restent invisibles par votre référent jusqu&apos;à ce que vous publiiez.
+        </p>
+      )}
     </form>
   );
 }

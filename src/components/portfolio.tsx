@@ -25,10 +25,12 @@ import {
   type Competence,
 } from "@/lib/referentiel";
 import {
+  cleDepot,
   COULEURS_COMPETENCE,
   COULEURS_EVALUATION,
   dateCourte,
   dateRelative,
+  depotsPublieSet,
   LIBELLES_JOURNAL,
   nbMots,
   taille,
@@ -45,11 +47,12 @@ import {
 
 export type DonneesPortfolio = {
   etudiant: Utilisateur;
-  presentation?: { texte: string; projet_pro: string; maj_le: string };
+  presentation?: { texte: string; projet_pro: string; maj_le: string; publie_le: string | null };
   argumentaires: Argumentaire[];
   traces: Trace[];
   evaluations: Evaluation[];
   rendezVous: RendezVous[];
+  depots: { annee: number; competence: string; publie_le: string }[];
   journal: (EntreeJournal & { acteur_nom: string; acteur_role: string })[];
   modifsEtudiant: Map<string, string>;
   derniereVisite: string | null;
@@ -113,11 +116,20 @@ function StatutPublication({ evaluation }: { evaluation?: Evaluation }) {
 export function VuePresentation({ donnees, utilisateur }: { donnees: DonneesPortfolio; utilisateur: Utilisateur }) {
   const { etudiant, presentation } = donnees;
   const modifiable = peutModifier(utilisateur, etudiant.id);
+  const enseignant = estEnseignant(utilisateur);
+  const publiee = !!presentation?.publie_le;
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <Carte titre="Présentation de l'étudiant·e">
         {modifiable ? (
-          <FormPresentation etudiantId={etudiant.id} texte={presentation?.texte ?? ""} projetPro={presentation?.projet_pro ?? ""} />
+          <FormPresentation
+            etudiantId={etudiant.id}
+            texte={presentation?.texte ?? ""}
+            projetPro={presentation?.projet_pro ?? ""}
+            publiee={publiee}
+          />
+        ) : enseignant && !publiee ? (
+          <p className="text-sm text-muted">Brouillon non publié : l&apos;étudiant·e n&apos;a pas encore partagé sa présentation.</p>
         ) : presentation ? (
           <div className="space-y-4 text-sm leading-relaxed">
             <p className="whitespace-pre-wrap">{presentation.texte || <em className="text-muted">Non renseigné</em>}</p>
@@ -129,7 +141,7 @@ export function VuePresentation({ donnees, utilisateur }: { donnees: DonneesPort
         ) : (
           <p className="text-sm text-muted">L&apos;étudiant·e n&apos;a pas encore rédigé sa présentation.</p>
         )}
-        {presentation && <p className="mt-4 text-xs text-muted">Dernière mise à jour : {dateCourte(presentation.maj_le)}</p>}
+        {presentation && (!enseignant || publiee) && <p className="mt-4 text-xs text-muted">Dernière mise à jour : {dateCourte(presentation.maj_le)}</p>}
       </Carte>
       <Carte titre="Le portfolio en bref" className="h-fit text-sm">
         <ul className="space-y-2 text-muted">
@@ -162,8 +174,10 @@ export function VueCompetence({
   const modifiable = peutModifier(utilisateur, etudiant.id, annee);
   const enseignant = estEnseignant(utilisateur);
   const cellule = { etudiantId: etudiant.id, annee, competence: competence.code };
+  const publie = depotsPublieSet(donnees.depots).has(cleDepot(annee, competence.code));
+  const visibleParReferent = modifiable || publie;
   const argumentaire = donnees.argumentaires.find((a) => a.annee === annee && a.competence === competence.code);
-  const traces = donnees.traces.filter((t) => t.annee === annee && t.competence === competence.code);
+  const traces = visibleParReferent ? donnees.traces.filter((t) => t.annee === annee && t.competence === competence.code) : [];
   const evaluation = donnees.evaluations.find((e) => e.annee === annee && e.competence === competence.code);
   const derniereModif = donnees.modifsEtudiant.get(`${annee}-${competence.code}`);
   const modifieApresEval = evaluation && derniereModif && derniereModif > evaluation.maj_le;
@@ -186,12 +200,16 @@ export function VueCompetence({
           titre={
             <span className="flex items-center justify-between">
               Argumentaire
-              {argumentaire && <span className="text-xs font-normal text-muted">Modifié {dateRelative(argumentaire.maj_le)}</span>}
+              {argumentaire && visibleParReferent && (
+                <span className="text-xs font-normal text-muted">Modifié {dateRelative(argumentaire.maj_le)}</span>
+              )}
             </span>
           }
         >
           {modifiable ? (
-            <FormArgumentaire {...cellule} texte={argumentaire?.texte ?? ""} />
+            <FormArgumentaire {...cellule} texte={argumentaire?.texte ?? ""} publie={publie} />
+          ) : !visibleParReferent ? (
+            <p className="text-sm text-muted">Brouillon non publié : l&apos;étudiant·e n&apos;a pas encore partagé ce dépôt.</p>
           ) : argumentaire?.texte ? (
             <>
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{argumentaire.texte}</p>
@@ -206,18 +224,26 @@ export function VueCompetence({
           titre={
             <span className="flex items-center justify-between">
               Traces
-              <span className="text-xs font-normal text-muted">
-                {traces.length} / {MAX_TRACES_PAR_COMPETENCE}
-              </span>
+              {visibleParReferent && (
+                <span className="text-xs font-normal text-muted">
+                  {traces.length} / {MAX_TRACES_PAR_COMPETENCE}
+                </span>
+              )}
             </span>
           }
         >
-          {traces.length === 0 && <p className="mb-3 text-sm text-muted">Aucune trace déposée.</p>}
-          <ul className="space-y-3">
-            {traces.map((t) => (
-              <CarteTrace key={t.id} trace={t} modifiable={modifiable} />
-            ))}
-          </ul>
+          {!visibleParReferent ? (
+            <p className="text-sm text-muted">Brouillon non publié : l&apos;étudiant·e n&apos;a pas encore partagé ce dépôt.</p>
+          ) : (
+            <>
+              {traces.length === 0 && <p className="mb-3 text-sm text-muted">Aucune trace déposée.</p>}
+              <ul className="space-y-3">
+                {traces.map((t) => (
+                  <CarteTrace key={t.id} trace={t} modifiable={modifiable} />
+                ))}
+              </ul>
+            </>
+          )}
           {modifiable && traces.length < MAX_TRACES_PAR_COMPETENCE && (
             <div className="mt-4">
               <FormNouvelleTrace {...cellule} />
@@ -486,6 +512,8 @@ export async function VueComplete({
   const { etudiant, presentation } = donnees;
   const annees = ([1, 2, 3] as AnneeBUT[]).filter((a) => a <= anneeMax);
   const enseignant = await suitEtudiant(utilisateur, etudiant.id);
+  const depotsPublies = depotsPublieSet(donnees.depots);
+  const presentationVisible = !enseignant || !!presentation?.publie_le;
   return (
     <div className="space-y-6">
       <div className="no-print flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
@@ -509,7 +537,9 @@ export async function VueComplete({
         <p className="text-sm text-muted">
           BUT{anneeMax} GEA · parcours {infosParcours(etudiant.parcours).code} · {etudiant.email}
         </p>
-        {presentation ? (
+        {!presentationVisible ? (
+          <p className="mt-4 text-sm text-muted">Brouillon non publié : l&apos;étudiant·e n&apos;a pas encore partagé sa présentation.</p>
+        ) : presentation ? (
           <div className="mt-4 grid gap-4 text-sm leading-relaxed sm:grid-cols-2">
             <p className="whitespace-pre-wrap">{presentation.texte}</p>
             <div>
@@ -535,8 +565,9 @@ export async function VueComplete({
             )}
           </div>
           {competencesDeLAnnee(annee, donnees.etudiant.parcours).map((c) => {
-            const arg = donnees.argumentaires.find((a) => a.annee === annee && a.competence === c.code);
-            const traces = donnees.traces.filter((t) => t.annee === annee && t.competence === c.code);
+            const visible = !enseignant || depotsPublies.has(cleDepot(annee, c.code));
+            const arg = visible ? donnees.argumentaires.find((a) => a.annee === annee && a.competence === c.code) : undefined;
+            const traces = visible ? donnees.traces.filter((t) => t.annee === annee && t.competence === c.code) : [];
             const ev = donnees.evaluations.find((e) => e.annee === annee && e.competence === c.code);
             const couleur = COULEURS_COMPETENCE[c.code];
             return (
@@ -558,26 +589,32 @@ export async function VueComplete({
                     <BadgeEvaluation niveau={ev?.niveau_publie ?? "non_evalue"} note={ev?.note_publiee} />
                   </div>
                 </div>
-                <div className="mt-3 text-sm leading-relaxed">
-                  {arg?.texte ? <p className="whitespace-pre-wrap">{arg.texte}</p> : <p className="text-muted">Aucun argumentaire.</p>}
-                </div>
-                <div className="mt-3">
-                  <div className="mb-1 text-xs font-medium uppercase text-muted">Traces</div>
-                  {traces.length ? (
-                    <ul className="space-y-1 text-sm">
-                      {traces.map((t) => (
-                        <li key={t.id}>
-                          <a href={`/fichiers/${t.id}`} target="_blank" className="text-primary hover:underline">
-                            {t.titre}
-                          </a>
-                          {t.description && <span className="text-muted"> — {t.description}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted">Aucune trace.</p>
-                  )}
-                </div>
+                {!visible ? (
+                  <p className="mt-3 text-sm text-muted">Brouillon non publié : l&apos;étudiant·e n&apos;a pas encore partagé ce dépôt.</p>
+                ) : (
+                  <>
+                    <div className="mt-3 text-sm leading-relaxed">
+                      {arg?.texte ? <p className="whitespace-pre-wrap">{arg.texte}</p> : <p className="text-muted">Aucun argumentaire.</p>}
+                    </div>
+                    <div className="mt-3">
+                      <div className="mb-1 text-xs font-medium uppercase text-muted">Traces</div>
+                      {traces.length ? (
+                        <ul className="space-y-1 text-sm">
+                          {traces.map((t) => (
+                            <li key={t.id}>
+                              <a href={`/fichiers/${t.id}`} target="_blank" className="text-primary hover:underline">
+                                {t.titre}
+                              </a>
+                              {t.description && <span className="text-muted"> — {t.description}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted">Aucune trace.</p>
+                      )}
+                    </div>
+                  </>
+                )}
                 {ev?.publiee_le && ev.commentaire_publie && (
                   <div className="mt-3 rounded-md bg-background p-3 text-sm">
                     <span className="font-medium">Commentaire de l&apos;enseignant·e : </span>

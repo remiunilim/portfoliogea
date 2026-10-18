@@ -5,6 +5,7 @@ import { MarqueurConsultation } from "@/components/formulaires";
 import { VueCompetence, VueComplete, VuePresentation, VueSuivi, type DonneesPortfolio } from "@/components/portfolio";
 import {
   getArgumentaires,
+  getDepots,
   getRendezVous,
   getDerniereConsultation,
   getDernieresModifsEtudiant,
@@ -16,7 +17,7 @@ import {
 } from "@/lib/db";
 import { estEnseignant, peutConsulter, peutModifier, utilisateurCourant } from "@/lib/session";
 import { ANNEES, competencesDeLAnnee, estAnneeBUT, infosParcours, parcoursEstConfigure, type AnneeBUT } from "@/lib/referentiel";
-import { COULEURS_COMPETENCE } from "@/lib/affichage";
+import { cleDepot, COULEURS_COMPETENCE, depotsPublieSet, journalVisible } from "@/lib/affichage";
 
 export default async function PagePortfolio(props: PageProps<"/portfolio/[etudiantId]">) {
   const { etudiantId } = await props.params;
@@ -38,26 +39,36 @@ export default async function PagePortfolio(props: PageProps<"/portfolio/[etudia
 
   const enseignant = estEnseignant(u);
   const derniereVisite = enseignant ? await getDerniereConsultation(u.id, etudiantId) : null;
+  const presentation = await getPresentation(etudiantId);
+  const depots = await getDepots(etudiantId);
+  const depotsPublies = depotsPublieSet(depots);
   const donnees: DonneesPortfolio = {
     etudiant,
-    presentation: await getPresentation(etudiantId),
+    presentation,
     argumentaires: await getArgumentaires(etudiantId),
     traces: await getTraces(etudiantId),
     evaluations: await getEvaluations(etudiantId),
     rendezVous: await getRendezVous(etudiantId),
-    journal: enseignant ? await getJournal({ etudiantId, limite: 200 }) : [],
+    depots,
+    journal: enseignant
+      ? journalVisible(await getJournal({ etudiantId, limite: 200 }), depotsPublies, !!presentation?.publie_le)
+      : [],
     modifsEtudiant: await getDernieresModifsEtudiant(etudiantId),
     derniereVisite,
   };
 
+  // Tant que le dépôt n'est pas publié par l'étudiant·e, le référent ne doit rien en voir : les
+  // indicateurs (pastille d'onglet, badge « Nouveau ») reflètent l'état publié, pas le brouillon réel.
   const etatCellule = (a: number, code: string) => {
+    if (enseignant && !depotsPublies.has(cleDepot(a, code))) return "vide";
     const arg = donnees.argumentaires.find((x) => x.annee === a && x.competence === code)?.texte.trim();
     const nb = donnees.traces.filter((t) => t.annee === a && t.competence === code).length;
     return arg && nb ? "complet" : arg || nb ? "partiel" : "vide";
   };
   const estNouveau = (a: number, code: string) => {
+    if (!enseignant || !depotsPublies.has(cleDepot(a, code))) return false;
     const modif = donnees.modifsEtudiant.get(`${a}-${code}`);
-    return enseignant && !!modif && (!derniereVisite || modif > derniereVisite);
+    return !!modif && (!derniereVisite || modif > derniereVisite);
   };
   const lien = (params: { annee?: number; onglet?: string }) =>
     `/portfolio/${etudiantId}?annee=${params.annee ?? annee}&onglet=${params.onglet ?? onglet}`;

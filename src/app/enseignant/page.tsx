@@ -5,10 +5,12 @@ import { BadgeEvaluation, Journal } from "@/components/portfolio";
 import {
   brouillonNonPublie,
   getArgumentaires,
+  getDepots,
   getDerniereConsultation,
   getDernieresModifsEtudiant,
   getEvaluations,
   getJournal,
+  getPresentation,
   getRendezVous,
   getTraces,
   rendezVousNonPublie,
@@ -30,7 +32,7 @@ import {
   RENDEZ_VOUS,
   type AnneeBUT,
 } from "@/lib/referentiel";
-import { COULEURS_COMPETENCE, dateRelative } from "@/lib/affichage";
+import { cleDepot, COULEURS_COMPETENCE, dateRelative, depotsPublieSet, entreeJournalVisible } from "@/lib/affichage";
 
 type EtatCellule = {
   depot: "vide" | "partiel" | "complet";
@@ -92,14 +94,21 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
       const args = await getArgumentaires(etu.id);
       const traces = await getTraces(etu.id);
       const evals = await getEvaluations(etu.id);
-      const modifs = await getDernieresModifsEtudiant(etu.id);
+      const modifsBrutes = await getDernieresModifsEtudiant(etu.id);
+      const depots = await getDepots(etu.id);
+      const depotsPublies = depotsPublieSet(depots);
+      const presentation = await getPresentation(etu.id);
+      // Tant qu'un dépôt n'est pas publié, le référent ne doit rien en voir : ni son contenu réel
+      // (traité ci-dessous), ni même la date de dernière modification.
+      const modifs = new Map([...modifsBrutes].filter(([cle]) => depotsPublies.has(cle)));
       const vu = await getDerniereConsultation(u.id, etu.id);
       const cellules: Record<string, EtatCellule> = {};
       for (const c of competences) {
-        const aArgumentaire = !!args.find((a) => a.annee === promo && a.competence === c.code)?.texte.trim();
-        const nbTraces = traces.filter((t) => t.annee === promo && t.competence === c.code).length;
+        const publie = depotsPublies.has(cleDepot(promo, c.code));
+        const aArgumentaire = publie && !!args.find((a) => a.annee === promo && a.competence === c.code)?.texte.trim();
+        const nbTraces = publie ? traces.filter((t) => t.annee === promo && t.competence === c.code).length : 0;
         const ev = evals.find((e) => e.annee === promo && e.competence === c.code);
-        const derniereModif = modifs.get(`${promo}-${c.code}`);
+        const derniereModif = modifs.get(cleDepot(promo, c.code));
         cellules[c.code] = {
           depot: aArgumentaire && nbTraces ? "complet" : aArgumentaire || nbTraces ? "partiel" : "vide",
           nbTraces,
@@ -116,7 +125,7 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
       // Années antérieures complétées après coup (historique BUT1/BUT2).
       const historique = [...modifs.entries()].filter(([cle]) => Number(cle.split("-")[0]) < promo).length;
       const rdv = (await getRendezVous(etu.id)).filter((r) => r.annee === promo);
-      return { etu, cellules, historique, rdv };
+      return { etu, cellules, historique, rdv, depotsPublies, presentationPubliee: !!presentation?.publie_le };
     }),
   );
 
@@ -128,6 +137,7 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
     nouveaux: toutes.filter((c) => c.nouveau).length,
     total: toutes.length,
   };
+  const infosParEtudiant = new Map(lignes.map((l) => [l.etu.id, { depotsPublies: l.depotsPublies, presentationPubliee: l.presentationPubliee }]));
   const journal = (
     await getJournal({
       anneeBut: promo,
@@ -136,6 +146,10 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
     })
   )
     .filter((j) => etudiants.some((e) => e.id === j.etudiant_id))
+    .filter((j) => {
+      const infos = infosParEtudiant.get(j.etudiant_id);
+      return !infos || entreeJournalVisible(j, infos.depotsPublies, infos.presentationPubliee);
+    })
     .slice(0, 25);
 
   return (

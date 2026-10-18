@@ -30,6 +30,7 @@ import {
   enregistrerEvaluation,
   enregistrerPresentation,
   getArgumentaires,
+  getDepots,
   getPresentation,
   getTrace,
   getTraces,
@@ -40,7 +41,9 @@ import {
   marquerNotificationsLues,
   modifierTrace,
   notifier,
+  publierDepot,
   publierEvaluations,
+  publierPresentation,
   supprimerTrace,
 } from "@/lib/db";
 import { analyserImport, appliquerImport, lireFichier, PARCOURS_GEA, type LigneApercu } from "@/lib/import-etudiants";
@@ -143,6 +146,13 @@ async function contexteDepot(formData: FormData) {
   return { u: u!, etudiantId, annee, competence } as const;
 }
 
+// Les traces ne publient pas elles-mêmes un dépôt (seul l'argumentaire porte le bouton « publier ») :
+// tant que la compétence n'a pas été publiée, leur ajout/modification reste un brouillon privé, non
+// notifié au référent.
+async function depotPublie(etudiantId: string, annee: number, competence: string): Promise<boolean> {
+  return (await getDepots(etudiantId)).some((d) => d.annee === annee && d.competence === competence);
+}
+
 async function lirePdf(fichier: FormDataEntryValue | null): Promise<{ nom: string; contenu: Buffer } | string> {
   if (!(fichier instanceof File) || fichier.size === 0) return "Choisissez un fichier PDF.";
   if (fichier.size > TAILLE_MAX_PDF) return "Le fichier dépasse 10 Mo.";
@@ -172,14 +182,30 @@ export async function sauverPresentation(_: EtatFormulaire, formData: FormData):
   const presentation = texte(formData, "texte");
   const projetPro = texte(formData, "projet_pro");
   const avant = await getPresentation(etudiantId);
-  if (avant && avant.texte === presentation && avant.projet_pro === projetPro) {
-    return { ok: true, message: "Aucune modification." };
+  const dejaPublie = !!avant?.publie_le;
+  const modifie = !avant || avant.texte !== presentation || avant.projet_pro !== projetPro;
+  const publier = formData.get("publier") === "1" && !dejaPublie;
+  if (!modifie && !publier) return { ok: true, message: "Aucune modification." };
+  if (modifie) {
+    await enregistrerPresentation(etudiantId, presentation, projetPro);
+    await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee: null, competence: null, type: "presentation_maj", detail: "" });
   }
-  await enregistrerPresentation(etudiantId, presentation, projetPro);
-  await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee: null, competence: null, type: "presentation_maj", detail: "" });
-  await prevenirReferent(u!, null, null, "présentation et projet professionnel");
+  if (publier) {
+    await publierPresentation(etudiantId);
+    await journaliser({ etudiant_id: etudiantId, acteur_id: u!.id, annee: null, competence: null, type: "presentation_publiee", detail: "" });
+  }
+  if (publier || (dejaPublie && modifie)) {
+    await prevenirReferent(u!, null, null, "présentation et projet professionnel");
+  }
   refresh();
-  return { ok: true, message: "Présentation enregistrée." };
+  return {
+    ok: true,
+    message: publier
+      ? "Présentation publiée : votre référent peut la consulter."
+      : dejaPublie
+        ? "Présentation enregistrée."
+        : "Brouillon enregistré, non visible par votre référent.",
+  };
 }
 
 export async function sauverArgumentaire(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
@@ -189,20 +215,38 @@ export async function sauverArgumentaire(_: EtatFormulaire, formData: FormData):
   const avant = (await getArgumentaires(ctx.etudiantId)).find(
     (a) => a.annee === ctx.annee && a.competence === ctx.competence,
   );
-  if ((avant?.texte ?? "") === nouveau) return { ok: true, message: "Aucune modification." };
-  await enregistrerArgumentaire(ctx.etudiantId, ctx.annee, ctx.competence, nouveau);
-  const ecart = nbMots(nouveau) - nbMots(avant?.texte ?? "");
-  await journaliser({
-    etudiant_id: ctx.etudiantId,
-    acteur_id: ctx.u.id,
-    annee: ctx.annee,
-    competence: ctx.competence,
-    type: avant ? "argumentaire_maj" : "argumentaire_cree",
-    detail: `${nbMots(nouveau)} mots${avant ? ` (${ecart >= 0 ? "+" : ""}${ecart})` : ""}`,
-  });
-  await prevenirReferent(ctx.u, ctx.annee, ctx.competence, `argumentaire ${avant ? "modifié" : "rédigé"} (${nbMots(nouveau)} mots)`);
+  const dejaPublie = await depotPublie(ctx.etudiantId, ctx.annee, ctx.competence);
+  const modifie = (avant?.texte ?? "") !== nouveau;
+  const publier = formData.get("publier") === "1" && !dejaPublie;
+  if (!modifie && !publier) return { ok: true, message: "Aucune modification." };
+  if (modifie) {
+    await enregistrerArgumentaire(ctx.etudiantId, ctx.annee, ctx.competence, nouveau);
+    const ecart = nbMots(nouveau) - nbMots(avant?.texte ?? "");
+    await journaliser({
+      etudiant_id: ctx.etudiantId,
+      acteur_id: ctx.u.id,
+      annee: ctx.annee,
+      competence: ctx.competence,
+      type: avant ? "argumentaire_maj" : "argumentaire_cree",
+      detail: `${nbMots(nouveau)} mots${avant ? ` (${ecart >= 0 ? "+" : ""}${ecart})` : ""}`,
+    });
+  }
+  if (publier) {
+    await publierDepot(ctx.etudiantId, ctx.annee, ctx.competence);
+    await journaliser({ etudiant_id: ctx.etudiantId, acteur_id: ctx.u.id, annee: ctx.annee, competence: ctx.competence, type: "depot_publie", detail: "" });
+  }
+  if (publier || (dejaPublie && modifie)) {
+    await prevenirReferent(ctx.u, ctx.annee, ctx.competence, `argumentaire ${avant ? "modifié" : "rédigé"} (${nbMots(nouveau)} mots)`);
+  }
   refresh();
-  return { ok: true, message: "Argumentaire enregistré." };
+  return {
+    ok: true,
+    message: publier
+      ? "Dépôt publié : votre référent peut le consulter."
+      : dejaPublie
+        ? "Argumentaire enregistré."
+        : "Brouillon enregistré, non visible par votre référent.",
+  };
 }
 
 export async function deposerTrace(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
@@ -231,7 +275,9 @@ export async function deposerTrace(_: EtatFormulaire, formData: FormData): Promi
     pdf.contenu,
   );
   await journaliser({ etudiant_id: ctx.etudiantId, acteur_id: ctx.u.id, annee: ctx.annee, competence: ctx.competence, type: "trace_ajoutee", detail: titre });
-  await prevenirReferent(ctx.u, ctx.annee, ctx.competence, `trace déposée : ${titre}`);
+  if (await depotPublie(ctx.etudiantId, ctx.annee, ctx.competence)) {
+    await prevenirReferent(ctx.u, ctx.annee, ctx.competence, `trace déposée : ${titre}`);
+  }
   refresh();
   return { ok: true, message: "Trace déposée." };
 }
@@ -258,7 +304,9 @@ export async function modifierTraceAction(_: EtatFormulaire, formData: FormData)
     type: pdf ? "trace_remplacee" : "trace_modifiee",
     detail: pdf ? `${titre} — nouveau fichier : ${pdf.nom}` : titre,
   });
-  await prevenirReferent(u!, trace.annee, trace.competence, pdf ? `fichier de trace remplacé : ${titre}` : `trace modifiée : ${titre}`);
+  if (await depotPublie(trace.etudiant_id, trace.annee, trace.competence)) {
+    await prevenirReferent(u!, trace.annee, trace.competence, pdf ? `fichier de trace remplacé : ${titre}` : `trace modifiée : ${titre}`);
+  }
   refresh();
   return { ok: true, message: pdf ? "Fichier remplacé." : "Trace modifiée." };
 }
@@ -270,7 +318,9 @@ export async function supprimerTraceAction(formData: FormData) {
   if (!peutModifier(u, trace.etudiant_id, trace.annee)) return;
   await supprimerTrace(trace.id);
   await journaliser({ etudiant_id: trace.etudiant_id, acteur_id: u!.id, annee: trace.annee, competence: trace.competence, type: "trace_supprimee", detail: trace.titre });
-  await prevenirReferent(u!, trace.annee, trace.competence, `trace supprimée : ${trace.titre}`);
+  if (await depotPublie(trace.etudiant_id, trace.annee, trace.competence)) {
+    await prevenirReferent(u!, trace.annee, trace.competence, `trace supprimée : ${trace.titre}`);
+  }
   refresh();
 }
 
