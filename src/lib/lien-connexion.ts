@@ -12,7 +12,13 @@ import {
   type Utilisateur,
 } from "./db";
 import { EMAIL_VALIDE } from "./import-etudiants";
-import { envoyerCourriel } from "./mail";
+import { echapperHtml, envoyerCourriel, gabaritCourrielHtml } from "./mail";
+
+const boutonHtml = (lien: string, libelle: string) => `
+  <p style="margin:0 0 24px;text-align:center;">
+    <a href="${lien}" style="display:inline-block;background:#1f5f8b;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 28px;border-radius:8px;">${libelle}</a>
+  </p>
+  <p style="margin:0;font-size:13px;color:#5d6878;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br><a href="${lien}" style="color:#1f5f8b;word-break:break-all;">${lien}</a></p>`;
 
 // Connexion par lien envoyé par mail, sans mot de passe ni SSO (adaptation pour un hébergement
 // hors DSI, ex. OVH) : la personne saisit son adresse mail universitaire, reçoit un lien valable
@@ -70,6 +76,12 @@ export async function envoyerLienConnexion(email: string): Promise<void> {
         "",
         "Si vous n'avez pas demandé cette connexion, ignorez simplement ce message.",
       ].join("\n"),
+      gabaritCourrielHtml(`
+        <p style="margin:0 0 16px;">Bonjour ${echapperHtml(u.prenom)},</p>
+        <p style="margin:0 0 20px;">Voici votre lien de connexion, valable <strong>20 minutes</strong> et à usage unique :</p>
+        ${boutonHtml(lien, "Se connecter à Folio GEA")}
+        <p style="margin:20px 0 0;font-size:13px;color:#5d6878;">Si vous n'avez pas demandé cette connexion, ignorez simplement ce message.</p>
+      `),
     );
     return;
   }
@@ -92,6 +104,12 @@ export async function envoyerLienConnexion(email: string): Promise<void> {
       "Si vous êtes enseignant·e, contactez l'administrateur pour qu'il crée votre compte.",
       "Si vous n'avez pas demandé cette connexion, ignorez simplement ce message.",
     ].join("\n"),
+    gabaritCourrielHtml(`
+      <p style="margin:0 0 16px;">Bonjour,</p>
+      <p style="margin:0 0 20px;">Cette adresse n'est pas encore enregistrée dans Folio GEA. Si vous êtes <strong>étudiant·e</strong> en BUT GEA, le lien ci-dessous vous permet de créer votre profil (valable 20 minutes) :</p>
+      ${boutonHtml(lien, "Créer mon profil")}
+      <p style="margin:20px 0 0;font-size:13px;color:#5d6878;">Si vous êtes enseignant·e, contactez l'administrateur pour qu'il crée votre compte.<br>Si vous n'avez pas demandé cette connexion, ignorez simplement ce message.</p>
+    `),
   );
 }
 
