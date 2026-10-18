@@ -79,6 +79,13 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
     const r = enseignants.find((e) => e.id === id);
     return r ? `${r.prenom} ${r.nom}` : "Sans référent";
   };
+  const lienExport = (() => {
+    const p = new URLSearchParams();
+    if (admin && filtreReferent) p.set("referent", filtreReferent);
+    if (filtreParcours) p.set("parcours", filtreParcours);
+    const q = p.toString();
+    return `/enseignant/export${q ? `?${q}` : ""}`;
+  })();
 
   const lignes = await Promise.all(
     etudiants.map(async (etu) => {
@@ -142,16 +149,25 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
               {admin ? "Vue administrateur : tous les étudiants" : "Étudiants dont vous êtes l'enseignant·e référent·e"}
             </p>
           </div>
-          <div className="flex items-center gap-1 rounded-lg border border-line bg-surface p-1">
-            {ANNEES.map((a) => (
-              <Link
-                key={a}
-                href={lienFiltre({ promo: a })}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium ${a === promo ? "bg-primary text-white" : "hover:bg-primary-soft"}`}
-              >
-                BUT{a} <span className={`text-xs ${a === promo ? "text-white/80" : "text-muted"}`}>({effectifs[a]})</span>
-              </Link>
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 rounded-lg border border-line bg-surface p-1">
+              {ANNEES.map((a) => (
+                <Link
+                  key={a}
+                  href={lienFiltre({ promo: a })}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${a === promo ? "bg-primary text-white" : "hover:bg-primary-soft"}`}
+                >
+                  BUT{a} <span className={`text-xs ${a === promo ? "text-white/80" : "text-muted"}`}>({effectifs[a]})</span>
+                </Link>
+              ))}
+            </div>
+            <Link
+              href={lienExport}
+              className="rounded-md border border-line bg-surface px-3 py-2 text-sm font-medium hover:bg-primary-soft"
+              title="Toutes les années, au format Excel"
+            >
+              Exporter les notes (Excel)
+            </Link>
           </div>
         </div>
 
