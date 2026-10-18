@@ -1328,3 +1328,210 @@ async function peuplerDemo(pool: Pool) {
   // Le jeu de démonstration considère que Thomas Bernard a consulté Nathan il y a 3 jours.
   await pool.query("INSERT INTO consultations (enseignant_id, etudiant_id, vu_le) VALUES (?, ?, ?)", ["ens-bernard", "etu-garcia", ilYa(3)]);
 }
+
+// ---------- Transfert de données entre instances (export/import, administrateur) ----------
+// Permet de copier tous les comptes et portfolios d'une instance de Folio GEA vers une autre
+// (ex. de la version OVH vers la version DSI une fois déployée, ou inversement). Les comptes
+// sont reconnus par email : un compte déjà présent sur l'instance de destination n'est jamais
+// recréé ni modifié, seulement réutilisé pour relier les données importées (référent, auteur
+// d'une évaluation…). Ne contient jamais de mot de passe ni d'identifiant de connexion : ce
+// sont des éléments propres à chaque instance, sans sens une fois transférés.
+
+export type DonneesTransfert = {
+  version: 1;
+  exporte_le: string;
+  utilisateurs: Utilisateur[];
+  presentations: { etudiant_id: string; texte: string; projet_pro: string; maj_le: string }[];
+  argumentaires: Argumentaire[];
+  traces: Trace[];
+  evaluations: Evaluation[];
+  rendez_vous: RendezVous[];
+  journal: Omit<EntreeJournal, "id">[];
+};
+
+export async function exporterToutesLesDonnees(): Promise<DonneesTransfert> {
+  const pool = await obtenirPool();
+  const requete = async <T>(sql: string) => (await pool.query(sql))[0] as T[];
+  return {
+    version: 1,
+    exporte_le: maintenant(),
+    utilisateurs: await requete<Utilisateur>(
+      "SELECT id, nom, prenom, email, role, annee_but, groupe, parcours, referent_id, actif, pref_courriel FROM utilisateurs",
+    ),
+    presentations: await requete("SELECT etudiant_id, texte, projet_pro, maj_le FROM presentations"),
+    argumentaires: await requete<Argumentaire>("SELECT etudiant_id, annee, competence, texte, maj_le FROM argumentaires"),
+    traces: await requete<Trace>(
+      "SELECT id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le FROM traces",
+    ),
+    evaluations: await requete<Evaluation>(
+      "SELECT etudiant_id, annee, competence, niveau, commentaire, enseignant_id, maj_le, niveau_publie, commentaire_publie, publiee_le, publiee_par, note, note_publiee FROM evaluations",
+    ),
+    rendez_vous: await requete<RendezVous>(
+      "SELECT etudiant_id, annee, numero, date_rdv, note, commentaire, enseignant_id, maj_le, note_publiee, commentaire_publie, publie_le FROM rendez_vous",
+    ),
+    journal: await requete("SELECT etudiant_id, acteur_id, annee, competence, type, detail, cree_le FROM journal"),
+  };
+}
+
+export type RapportImport = {
+  comptesCrees: number;
+  comptesReconnus: number;
+  tracesCopiees: number;
+  tracesManquantes: string[];
+};
+
+// Les fichiers des traces (contenu des PDF, par identifiant d'origine) sont fournis à part par
+// l'appelant (lus depuis l'archive .zip) : voir src/lib/transfert.ts.
+export async function importerToutesLesDonnees(
+  donnees: DonneesTransfert,
+  fichiersTraces: Map<string, Buffer>,
+): Promise<RapportImport> {
+  const pool = await obtenirPool();
+  const rapport: RapportImport = { comptesCrees: 0, comptesReconnus: 0, tracesCopiees: 0, tracesManquantes: [] };
+  const remap = new Map<string, string>();
+  const nouvellesTraces: { id: string; contenu: Buffer }[] = [];
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) Résolution de tous les comptes avant toute écriture, pour que les référents (y compris
+    // mutuels, ou cités avant d'apparaître dans la liste) soient toujours déjà connus ensuite.
+    for (const u of donnees.utilisateurs) {
+      const [lignes] = await conn.query("SELECT id FROM utilisateurs WHERE LOWER(email) = LOWER(?)", [u.email]);
+      const existant = (lignes as { id: string }[])[0];
+      remap.set(u.id, existant ? existant.id : `${u.role === "etudiant" ? "etu" : "ens"}-${randomUUID().slice(0, 8)}`);
+    }
+
+    // 2) Création des comptes non reconnus. Un compte déjà présent n'est jamais modifié.
+    for (const u of donnees.utilisateurs) {
+      const nouvelId = remap.get(u.id)!;
+      const [lignes] = await conn.query("SELECT 1 FROM utilisateurs WHERE id = ?", [nouvelId]);
+      if ((lignes as unknown[]).length) {
+        rapport.comptesReconnus++;
+        continue;
+      }
+      await conn.query(
+        `INSERT INTO utilisateurs (id, nom, prenom, email, role, annee_but, groupe, parcours, referent_id, actif, pref_courriel)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          nouvelId,
+          u.nom,
+          u.prenom,
+          u.email,
+          u.role,
+          u.annee_but,
+          u.groupe,
+          u.parcours,
+          u.referent_id ? (remap.get(u.referent_id) ?? null) : null,
+          u.actif,
+          u.pref_courriel,
+        ],
+      );
+      rapport.comptesCrees++;
+    }
+
+    // 3) Contenu des portfolios, rattaché aux identifiants de destination.
+    for (const p of donnees.presentations) {
+      const id = remap.get(p.etudiant_id);
+      if (!id) continue;
+      await conn.query(
+        `INSERT INTO presentations (etudiant_id, texte, projet_pro, maj_le) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE texte = VALUES(texte), projet_pro = VALUES(projet_pro), maj_le = VALUES(maj_le)`,
+        [id, p.texte, p.projet_pro, p.maj_le],
+      );
+    }
+
+    for (const a of donnees.argumentaires) {
+      const id = remap.get(a.etudiant_id);
+      if (!id) continue;
+      await conn.query(
+        `INSERT INTO argumentaires (etudiant_id, annee, competence, texte, maj_le) VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE texte = VALUES(texte), maj_le = VALUES(maj_le)`,
+        [id, a.annee, a.competence, a.texte, a.maj_le],
+      );
+    }
+
+    for (const e of donnees.evaluations) {
+      const etudiantId = remap.get(e.etudiant_id);
+      if (!etudiantId) continue;
+      const enseignantId = remap.get(e.enseignant_id) ?? e.enseignant_id;
+      const publieePar = e.publiee_par ? (remap.get(e.publiee_par) ?? e.publiee_par) : null;
+      await conn.query(
+        `INSERT INTO evaluations (etudiant_id, annee, competence, niveau, commentaire, enseignant_id, maj_le, niveau_publie, commentaire_publie, publiee_le, publiee_par, note, note_publiee)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE niveau = VALUES(niveau), commentaire = VALUES(commentaire), enseignant_id = VALUES(enseignant_id),
+           maj_le = VALUES(maj_le), niveau_publie = VALUES(niveau_publie), commentaire_publie = VALUES(commentaire_publie),
+           publiee_le = VALUES(publiee_le), publiee_par = VALUES(publiee_par), note = VALUES(note), note_publiee = VALUES(note_publiee)`,
+        [
+          etudiantId,
+          e.annee,
+          e.competence,
+          e.niveau,
+          e.commentaire,
+          enseignantId,
+          e.maj_le,
+          e.niveau_publie,
+          e.commentaire_publie,
+          e.publiee_le,
+          publieePar,
+          e.note,
+          e.note_publiee,
+        ],
+      );
+    }
+
+    for (const r of donnees.rendez_vous) {
+      const etudiantId = remap.get(r.etudiant_id);
+      if (!etudiantId) continue;
+      const enseignantId = remap.get(r.enseignant_id) ?? r.enseignant_id;
+      await conn.query(
+        `INSERT INTO rendez_vous (etudiant_id, annee, numero, date_rdv, note, commentaire, enseignant_id, maj_le, note_publiee, commentaire_publie, publie_le)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE date_rdv = VALUES(date_rdv), note = VALUES(note), commentaire = VALUES(commentaire),
+           enseignant_id = VALUES(enseignant_id), maj_le = VALUES(maj_le), note_publiee = VALUES(note_publiee),
+           commentaire_publie = VALUES(commentaire_publie), publie_le = VALUES(publie_le)`,
+        [etudiantId, r.annee, r.numero, r.date_rdv, r.note, r.commentaire, enseignantId, r.maj_le, r.note_publiee, r.commentaire_publie, r.publie_le],
+      );
+    }
+
+    for (const t of donnees.traces) {
+      const etudiantId = remap.get(t.etudiant_id);
+      const contenu = fichiersTraces.get(t.id);
+      if (!etudiantId || !contenu) {
+        if (etudiantId) rapport.tracesManquantes.push(t.titre);
+        continue;
+      }
+      const nouvelId = randomUUID();
+      await conn.query(
+        `INSERT INTO traces (id, etudiant_id, annee, competence, titre, description, fichier_nom, taille, depose_le, maj_le)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nouvelId, etudiantId, t.annee, t.competence, t.titre, t.description, t.fichier_nom, t.taille, t.depose_le, t.maj_le],
+      );
+      nouvellesTraces.push({ id: nouvelId, contenu });
+      rapport.tracesCopiees++;
+    }
+
+    for (const j of donnees.journal) {
+      const etudiantId = remap.get(j.etudiant_id);
+      if (!etudiantId) continue;
+      const acteurId = remap.get(j.acteur_id) ?? j.acteur_id;
+      await conn.query(
+        "INSERT INTO journal (etudiant_id, acteur_id, annee, competence, type, detail, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [etudiantId, acteurId, j.annee, j.competence, j.type, j.detail, j.cree_le],
+      );
+    }
+
+    await conn.commit();
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+
+  // Fichiers écrits une fois la transaction validée (pas de fichier orphelin si elle échoue).
+  for (const t of nouvellesTraces) fs.writeFileSync(cheminFichier(t.id), t.contenu);
+
+  return rapport;
+}
