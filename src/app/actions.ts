@@ -41,7 +41,7 @@ import {
   supprimerTrace,
 } from "@/lib/db";
 import { analyserImport, appliquerImport, lireFichier, PARCOURS_GEA, type LigneApercu } from "@/lib/import-etudiants";
-import { envoyerLienConnexion } from "@/lib/lien-connexion";
+import { consommerJetonInscription, emailDuJetonInscription, envoyerLienConnexion } from "@/lib/lien-connexion";
 import { COOKIE_SESSION, estAdmin, estEnseignant, peutModifier, suitEtudiant, utilisateurCourant } from "@/lib/session";
 import {
   competenceParCode,
@@ -68,9 +68,10 @@ export async function seDeconnecter() {
   redirect("/connexion");
 }
 
-// Démarre une connexion : envoie un lien à usage unique si l'adresse correspond à un compte actif.
-// Message de confirmation volontairement identique dans tous les cas, pour ne pas révéler quelles
-// adresses sont enregistrées (voir src/lib/lien-connexion.ts).
+// Démarre une connexion : envoie un lien de connexion (compte existant) ou, pour une adresse
+// inconnue, un lien de création de profil étudiant (voir creerProfilEtudiantAction). Message de
+// confirmation volontairement identique dans tous les cas, pour ne pas révéler quelles adresses
+// sont déjà enregistrées (voir src/lib/lien-connexion.ts).
 export async function demarrerConnexionEmailAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   const email = texte(formData, "email");
   if (!email) return { ok: false, message: "Adresse mail obligatoire." };
@@ -78,9 +79,56 @@ export async function demarrerConnexionEmailAction(_: EtatFormulaire, formData: 
   return {
     ok: true,
     message:
-      "Si cette adresse est enregistrée dans Folio GEA, un lien de connexion vient de lui être envoyé (pensez à vérifier aussi les courriels indésirables). " +
-      "Si vous ne recevez rien d'ici quelques minutes, votre compte n'est peut-être pas encore créé dans Folio GEA : contactez votre enseignant·e référent·e ou l'administrateur.",
+      "Un courriel vient de vous être envoyé : un lien de connexion si vous avez déjà un profil, sinon un lien pour en créer un (étudiant·e uniquement). Pensez à vérifier aussi les courriels indésirables. " +
+      "Si rien n'arrive d'ici quelques minutes : vérifiez l'adresse saisie, ou contactez votre enseignant·e référent·e ou l'administrateur.",
   };
+}
+
+// Crée un profil étudiant après vérification de l'adresse mail (jeton reçu par le lien d'inscription,
+// voir src/lib/lien-connexion.ts) : le compte n'existe qu'à partir de cette étape, jamais avant.
+export async function creerProfilEtudiantAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
+  const jeton = texte(formData, "jeton");
+  const email = await emailDuJetonInscription(jeton);
+  if (!email) {
+    return {
+      ok: false,
+      message: "Ce lien n'est plus valable (déjà utilisé, ou expiré après 20 minutes). Redemandez un lien depuis la page de connexion.",
+    };
+  }
+
+  const nom = texte(formData, "nom");
+  const prenom = texte(formData, "prenom");
+  const annee = Number(texte(formData, "annee"));
+  const parcours = texte(formData, "parcours");
+  const referentId = texte(formData, "referent");
+
+  if (!nom || !prenom) return { ok: false, message: "Nom et prénom obligatoires." };
+  if (!estAnneeBUT(annee)) return { ok: false, message: "Année invalide." };
+  if ((annee === 2 || annee === 3) && !parcours) return { ok: false, message: "Choisissez votre parcours." };
+  if (!referentId) return { ok: false, message: "Choisissez votre enseignant·e référent·e." };
+  const referent = await getUtilisateur(referentId);
+  if (!referent || !estEnseignant(referent) || !referent.actif) {
+    return { ok: false, message: "Enseignant·e référent·e introuvable." };
+  }
+
+  const id = await creerUtilisateur({
+    nom,
+    prenom,
+    email,
+    role: "etudiant",
+    annee_but: annee,
+    parcours: annee === 1 ? undefined : parcours,
+    referent_id: referentId,
+  });
+  await consommerJetonInscription(jeton);
+  await notifier({
+    destinataire_id: referentId,
+    titre: "Nouvel·le étudiant·e",
+    detail: `${prenom} ${nom} (BUT${annee}) a créé son profil et vous a choisi·e comme référent·e.`,
+    lien: `/portfolio/${id}`,
+  });
+  (await cookies()).set(COOKIE_SESSION, id, { httpOnly: true, sameSite: "lax", path: "/" });
+  redirect(`/portfolio/${id}`);
 }
 
 // ---------- Contrôles communs ----------

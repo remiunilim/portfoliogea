@@ -247,21 +247,30 @@ async function creerSchema(pool: Pool) {
       cle VARCHAR(50) PRIMARY KEY,
       valeur VARCHAR(255) NOT NULL
     ) ENGINE=InnoDB`,
-    // Connexion par lien envoyé par mail : un jeton à usage unique, valable 20 minutes, par
-    // demande de connexion. Seul le hachage est stocké (le lien envoyé contient le jeton en clair).
+    // Connexion (et inscription) par lien envoyé par mail : un jeton à usage unique, valable
+    // 20 minutes, par demande. Seul le hachage est stocké (le lien envoyé contient le jeton en
+    // clair). Un jeton de connexion porte utilisateur_id (compte déjà existant) ; un jeton
+    // d'inscription porte email à la place (pas encore de compte, voir /connexion/creer-profil).
     `CREATE TABLE IF NOT EXISTS jetons_connexion (
       jeton_hache VARCHAR(64) PRIMARY KEY,
-      utilisateur_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      utilisateur_id VARCHAR(64) REFERENCES utilisateurs(id),
+      email VARCHAR(255),
       cree_le VARCHAR(32) NOT NULL,
       expire_le VARCHAR(32) NOT NULL,
       utilise_le VARCHAR(32),
-      INDEX jetons_utilisateur (utilisateur_id, cree_le)
+      INDEX jetons_utilisateur (utilisateur_id, cree_le),
+      INDEX jetons_email (email, cree_le)
     ) ENGINE=InnoDB`,
   ];
   for (const sql of tables) await pool.query(sql);
   // Colonnes ajoutées après la création initiale de la table (sans effet si déjà présentes :
   // MariaDB ignore silencieusement un ADD COLUMN IF NOT EXISTS déjà satisfait).
   await pool.query("ALTER TABLE courriels ADD COLUMN IF NOT EXISTS envoye_le VARCHAR(32)");
+  // jetons_connexion servait d'abord seulement à la connexion (utilisateur_id obligatoire) ; il
+  // porte aussi désormais les jetons d'inscription (email, sans utilisateur_id).
+  await pool.query("ALTER TABLE jetons_connexion ADD COLUMN IF NOT EXISTS email VARCHAR(255)");
+  await pool.query("ALTER TABLE jetons_connexion MODIFY COLUMN utilisateur_id VARCHAR(64) NULL");
+  await pool.query("ALTER TABLE jetons_connexion ADD INDEX IF NOT EXISTS jetons_email (email, cree_le)");
 }
 
 const maintenant = () => new Date().toISOString();
@@ -1033,13 +1042,51 @@ export async function demandeRecente(utilisateurId: string): Promise<boolean> {
 export async function verifierEtConsommerJeton(jetonHache: string): Promise<Utilisateur | undefined> {
   const pool = await obtenirPool();
   const [lignes] = await pool.query(
-    "SELECT * FROM jetons_connexion WHERE jeton_hache = ? AND utilise_le IS NULL AND expire_le > ?",
+    "SELECT * FROM jetons_connexion WHERE jeton_hache = ? AND utilisateur_id IS NOT NULL AND utilise_le IS NULL AND expire_le > ?",
     [jetonHache, maintenant()],
   );
   const jeton = (lignes as { utilisateur_id: string }[])[0];
   if (!jeton) return undefined;
   await pool.query("UPDATE jetons_connexion SET utilise_le = ? WHERE jeton_hache = ?", [maintenant(), jetonHache]);
   return getUtilisateur(jeton.utilisateur_id);
+}
+
+// ---------- Inscription (nouveau profil étudiant, créé par lui-même après vérification de son email) ----------
+
+export async function creerJetonInscription(email: string, jetonHache: string): Promise<void> {
+  const pool = await obtenirPool();
+  await pool.query("DELETE FROM jetons_connexion WHERE expire_le < ?", [maintenant()]);
+  await pool.query("INSERT INTO jetons_connexion (jeton_hache, email, cree_le, expire_le) VALUES (?, ?, ?, ?)", [
+    jetonHache,
+    email,
+    maintenant(),
+    new Date(Date.now() + DUREE_JETON_MINUTES * 60000).toISOString(),
+  ]);
+}
+
+export async function demandeInscriptionRecente(email: string): Promise<boolean> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    "SELECT 1 FROM jetons_connexion WHERE email = ? AND utilisateur_id IS NULL AND cree_le > ? LIMIT 1",
+    [email, new Date(Date.now() - 60000).toISOString()],
+  );
+  return (lignes as unknown[]).length > 0;
+}
+
+// Ne consomme pas le jeton (la page peut être rechargée pendant la saisie du formulaire) : seule
+// la création effective du compte le fait, via consommerJetonInscription.
+export async function emailDuJetonInscription(jetonHache: string): Promise<string | undefined> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    "SELECT email FROM jetons_connexion WHERE jeton_hache = ? AND email IS NOT NULL AND utilise_le IS NULL AND expire_le > ?",
+    [jetonHache, maintenant()],
+  );
+  return (lignes as { email: string }[])[0]?.email;
+}
+
+export async function consommerJetonInscription(jetonHache: string): Promise<void> {
+  const pool = await obtenirPool();
+  await pool.query("UPDATE jetons_connexion SET utilise_le = ? WHERE jeton_hache = ?", [maintenant(), jetonHache]);
 }
 
 // ---------- Jeu de démonstration ----------

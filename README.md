@@ -2,7 +2,7 @@
 
 Plateforme de dépôt, de suivi et d'évaluation des portfolios des étudiants du BUT GEA. Les référentiels des 4 parcours **GEMA, GPRH, GC2F et CG2P** sont configurés (tronc commun C1 à C3, C4-C5 propres à chaque parcours), d'après le PPN BUT GEA 2022. **CG2P reste masqué des listes de choix tant que l'administrateur ne l'a pas activé** (page *Étudiants et affectations*) : aucun établissement ne l'ouvre encore à l'IUT du Limousin. L'interface propose un **thème clair et un thème sombre** (bouton lune / soleil dans l'en-tête). Elle s'inspire d'UniFolio (IUT de Troyes) et de la démarche portfolio présentée lors des cafés pédagogiques.
 
-**Cette branche (`ovh`) est une variante autonome**, pensée pour un hébergement indépendant de la DSI (ex. OVH), à déployer sans attendre le SSO de l'université. Seule différence avec la branche principale : la connexion se fait par un **lien envoyé par mail** (comme un « magic link »), pas par mot de passe ni SSO — voir [Connexion et déploiement](#connexion-et-déploiement) plus bas. Tout le reste (référentiels, évaluation, export PDF/Excel, administration) est identique.
+**Cette branche (`ovh`) est une variante autonome**, pensée pour un hébergement indépendant de la DSI (ex. OVH), à déployer sans attendre le SSO de l'université. Différences avec la branche principale : la connexion se fait par un **lien envoyé par mail** (comme un « magic link »), pas par mot de passe ni SSO, et un·e étudiant·e inconnu·e de l'outil peut **créer son propre profil** (nom, prénom, année, parcours, référent) après vérification de son adresse — voir [Connexion et déploiement](#connexion-et-déploiement) plus bas. Tout le reste (référentiels, évaluation, export PDF/Excel, administration) est identique.
 
 ## Lancer en local
 
@@ -52,7 +52,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 | `src/lib/referentiel.ts` | Compétences, niveaux et apprentissages critiques des 4 parcours (GEMA, GPRH, GC2F, CG2P), pondération des notes (source unique, à mettre à jour avec le nouveau programme national) |
 | `src/lib/db.ts` | Schéma MariaDB, requêtes (toutes asynchrones) et jeu de démonstration |
 | `src/lib/session.ts` | Session (cookie) et règles d'accès (étudiant, référent, administrateur) |
-| `src/lib/lien-connexion.ts`, `src/app/connexion/lien`, `src/components/connexion.tsx` | Connexion par lien envoyé par mail (jeton à usage unique, 20 min) |
+| `src/lib/lien-connexion.ts`, `src/app/connexion/lien`, `src/app/connexion/creer-profil`, `src/components/connexion.tsx` | Connexion par lien envoyé par mail et auto-inscription étudiant·e (jeton à usage unique, 20 min) |
 | `src/lib/export-pdf.ts` | Assemblage du portfolio en un seul PDF (pdf-lib) |
 | `src/lib/export-notes.ts`, `src/app/enseignant/export` | Export Excel des notes (ExcelJS) |
 | `src/lib/mail.ts`, `src/lib/courriels.ts` | Envoi SMTP et vidage de la file de courriels (`src/app/api/cron/courriels`, déclenché périodiquement, voir `deploy/`) |
@@ -76,11 +76,12 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 Cette version se déploie **sans dépendre de la DSI** (pas de SSO universitaire à attendre) : elle garde exactement la même infrastructure que la branche principale (Next.js/Node.js derrière Apache, MariaDB, systemd), mais remplace la connexion par un **lien envoyé par mail**, sur le principe d'un « magic link » :
 
 - La personne saisit son adresse mail universitaire sur `/connexion`.
-- Si un compte existe pour cette adresse (créé au préalable par l'administrateur : import Excel ou ajout manuel, exactement comme avant), elle reçoit un mail avec un lien de connexion **valable 20 minutes et à usage unique**.
-- En cliquant, elle est connectée directement — aucun mot de passe à retenir, aucun compte à créer soi-même.
-- Le message affiché après la demande est **volontairement identique que l'adresse soit connue ou non** (pour ne pas révéler quelles adresses sont enregistrées), et un deuxième envoi est bloqué pendant une minute si la personne redemande un lien trop vite (anti-spam basique).
+- **Si un compte existe** pour cette adresse (créé par l'administrateur, import Excel, ajout manuel, ou par auto-inscription — voir ci-dessous), elle reçoit un mail avec un lien de connexion **valable 20 minutes et à usage unique**. En cliquant, elle est connectée directement.
+- **Si l'adresse est inconnue**, elle reçoit à la place un mail avec un lien de **création de profil**, menant à `/connexion/creer-profil` : Nom, Prénom, Année, Parcours (à partir de BUT2) et enseignant·e référent·e, tous obligatoires. Le compte n'existe qu'à partir de la soumission de ce formulaire — le lien sert uniquement à prouver que la personne possède bien cette adresse, pas à créer le compte lui-même. **Réservé aux étudiant·e·s** : un·e enseignant·e a toujours besoin d'un compte créé par l'administrateur. Le référent choisi reçoit une notification dans l'outil.
+- Le message affiché après la demande est **volontairement identique dans tous les cas** (adresse déjà enregistrée ou non), pour ne pas révéler quelles adresses existent, et un deuxième envoi est bloqué pendant une minute si la personne redemande un lien trop vite (anti-spam basique).
+- `EMAIL_ETUDIANTS_DOMAINES` (`.env.local`) restreint l'auto-inscription à un ou plusieurs domaines (ex. `unilim.fr`) : **à renseigner en production**, sinon n'importe quelle adresse peut créer un profil étudiant. Vide par défaut (pratique en local/démo). Sans effet sur la connexion d'un compte déjà créé.
 
-**Conséquence importante** : sans adresse mail enregistrée, une personne ne peut pas se connecter (contrairement à la branche principale, où c'était seulement nécessaire pour les notifications ou le SSO). L'import et l'ajout manuel le rappellent désormais clairement. L'administrateur peut toujours renseigner ou corriger une adresse a posteriori sur la fiche du compte.
+**Conséquence importante** : sans adresse mail (ou si l'auto-inscription n'est pas utilisée), une personne ne peut pas se connecter du tout. L'import et l'ajout manuel le rappellent désormais clairement. L'administrateur peut toujours renseigner, corriger une adresse, ou revoir/supprimer un profil créé par auto-inscription, sur la fiche du compte (page *Étudiants et affectations*).
 
 ### À préparer avant de déployer
 

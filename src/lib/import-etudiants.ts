@@ -29,7 +29,7 @@ export const COLONNES_MODELE = [
   "Groupe",
 ];
 
-const EMAIL_VALIDE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_VALIDE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const estEmailProvisoire = (email: string) => email.endsWith(".a-renseigner");
 
 const normaliser = (s: string) =>
