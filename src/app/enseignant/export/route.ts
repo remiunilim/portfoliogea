@@ -42,7 +42,7 @@ export async function GET(requete: Request) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 
-  return new Response(excel, {
+  return new Response(new Uint8Array(excel), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${nomFichier}.xlsx"`,
