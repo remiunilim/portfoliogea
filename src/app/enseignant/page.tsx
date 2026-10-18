@@ -161,13 +161,13 @@ export default async function TableauEnseignant(props: PageProps<"/enseignant">)
                 </Link>
               ))}
             </div>
-            <Link
+            <a
               href={lienExport}
               className="rounded-md border border-line bg-surface px-3 py-2 text-sm font-medium hover:bg-primary-soft"
               title="Toutes les années, au format Excel"
             >
               Exporter les notes (Excel)
-            </Link>
+            </a>
           </div>
         </div>
 
