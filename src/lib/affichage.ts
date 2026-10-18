@@ -2,8 +2,10 @@
 
 export const LIBELLES_JOURNAL: Record<string, string> = {
   presentation_maj: "a mis à jour sa présentation",
+  presentation_publiee: "a publié sa présentation",
   argumentaire_cree: "a rédigé l'argumentaire",
   argumentaire_maj: "a modifié l'argumentaire",
+  depot_publie: "a publié son dépôt",
   trace_ajoutee: "a déposé une trace",
   trace_modifiee: "a modifié une trace",
   trace_remplacee: "a remplacé le fichier d'une trace",
@@ -59,4 +61,47 @@ export function taille(octets: number) {
 
 export function nbMots(t: string) {
   return t.trim() ? t.trim().split(/\s+/).length : 0;
+}
+
+// ---------- Visibilité des dépôts (brouillon/publié) ----------
+// Tant qu'un·e étudiant·e n'a pas publié une compétence (ou sa présentation), son référent ne doit
+// rien en voir : ni le contenu (argumentaire, traces), ni même la trace de son activité dans le
+// journal. Une fois publié, le dépôt reste visible, y compris les modifications ultérieures
+// (pas besoin de republier).
+
+export function cleDepot(annee: number, competence: string) {
+  return `${annee}-${competence}`;
+}
+
+export function depotsPublieSet(depots: { annee: number; competence: string }[]): Set<string> {
+  return new Set(depots.map((d) => cleDepot(d.annee, d.competence)));
+}
+
+const TYPES_JOURNAL_BROUILLON_COMPETENCE = new Set([
+  "argumentaire_cree",
+  "argumentaire_maj",
+  "trace_ajoutee",
+  "trace_modifiee",
+  "trace_remplacee",
+  "trace_supprimee",
+]);
+
+export function entreeJournalVisible(
+  j: { annee: number | null; competence: string | null; type: string },
+  depotsPublies: Set<string>,
+  presentationPubliee: boolean,
+): boolean {
+  if (j.competence !== null) {
+    return !TYPES_JOURNAL_BROUILLON_COMPETENCE.has(j.type) || depotsPublies.has(cleDepot(j.annee!, j.competence));
+  }
+  if (j.type === "presentation_maj") return presentationPubliee;
+  return true;
+}
+
+export function journalVisible<T extends { annee: number | null; competence: string | null; type: string }>(
+  entrees: T[],
+  depotsPublies: Set<string>,
+  presentationPubliee: boolean,
+): T[] {
+  return entrees.filter((j) => entreeJournalVisible(j, depotsPublies, presentationPubliee));
 }

@@ -3,6 +3,7 @@ import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage, type RGB }
 import {
   cheminFichier,
   getArgumentaires,
+  getDepots,
   getEvaluations,
   getRendezVous,
   getPresentation,
@@ -10,6 +11,7 @@ import {
   getUtilisateur,
   type Utilisateur,
 } from "./db";
+import { cleDepot, depotsPublieSet } from "./affichage";
 import {
   codeAC,
   competencesDeLAnnee,
@@ -141,7 +143,10 @@ class Redaction {
   }
 }
 
-export async function genererPortfolioPdf(etudiant: Utilisateur): Promise<Uint8Array> {
+// `pourReferent` : true quand le PDF est généré pour quelqu'un d'autre que l'étudiant·e (son
+// référent ou l'administrateur) — dans ce cas, les dépôts (présentation, argumentaire, traces) non
+// encore publiés par l'étudiant·e sont omis, comme dans l'affichage à l'écran.
+export async function genererPortfolioPdf(etudiant: Utilisateur, pourReferent = false): Promise<Uint8Array> {
   const parcoursEtudiant = infosParcours(etudiant.parcours);
   const doc = await PDFDocument.create();
   const nomComplet = `${etudiant.prenom} ${etudiant.nom}`;
@@ -165,6 +170,8 @@ export async function genererPortfolioPdf(etudiant: Utilisateur): Promise<Uint8A
   const traces = await getTraces(etudiant.id);
   const evaluations = await getEvaluations(etudiant.id);
   const rendezVous = await getRendezVous(etudiant.id);
+  const depotsPublies = depotsPublieSet(await getDepots(etudiant.id));
+  const presentationVisible = !pourReferent || !!presentation?.publie_le;
   const rdvPublie = (annee: number, numero: number) => {
     const rv = rendezVous.find((x) => x.annee === annee && x.numero === numero);
     return rv?.publie_le ? rv.note_publiee : null;
@@ -200,9 +207,15 @@ export async function genererPortfolioPdf(etudiant: Utilisateur): Promise<Uint8A
   r.texte("Présentation", { taille: 22, police: "grasse" });
   r.espace(8);
   r.titreSection("Qui suis-je ?");
-  r.texte(presentation?.texte || "Non renseigné.", { police: presentation?.texte ? "normale" : "italique" });
+  r.texte(
+    !presentationVisible ? "Brouillon non encore publié par l'étudiant·e." : presentation?.texte || "Non renseigné.",
+    { police: presentationVisible && presentation?.texte ? "normale" : "italique" },
+  );
   r.titreSection("Projet professionnel");
-  r.texte(presentation?.projet_pro || "Non renseigné.", { police: presentation?.projet_pro ? "normale" : "italique" });
+  r.texte(
+    !presentationVisible ? "Brouillon non encore publié par l'étudiant·e." : presentation?.projet_pro || "Non renseigné.",
+    { police: presentationVisible && presentation?.projet_pro ? "normale" : "italique" },
+  );
 
   // ---- Compétences, année par année ----
   for (let annee = 1 as AnneeBUT; annee <= anneeMax; annee = (annee + 1) as AnneeBUT) {
@@ -210,9 +223,10 @@ export async function genererPortfolioPdf(etudiant: Utilisateur): Promise<Uint8A
     for (const c of competencesDeLAnnee(annee, etudiant.parcours)) {
       const niveau = c.niveaux[annee]!;
       const couleur = COULEURS[c.code as keyof typeof COULEURS] ?? COULEURS.primaire;
-      const arg = argumentaires.find((a) => a.annee === annee && a.competence === c.code);
+      const depotVisible = !pourReferent || depotsPublies.has(cleDepot(annee, c.code));
+      const arg = depotVisible ? argumentaires.find((a) => a.annee === annee && a.competence === c.code) : undefined;
       const ev = evaluations.find((e) => e.annee === annee && e.competence === c.code);
-      const tracesComp = traces.filter((t) => t.annee === annee && t.competence === c.code);
+      const tracesComp = depotVisible ? traces.filter((t) => t.annee === annee && t.competence === c.code) : [];
 
       const page = r.nouvellePage();
       if (premiereDeLAnnee) {
@@ -254,10 +268,14 @@ export async function genererPortfolioPdf(etudiant: Utilisateur): Promise<Uint8A
       r.puces(niveau.apprentissagesCritiques.map((ac, i) => `${codeAC(c, annee, i)}  ${ac}`), 9.5);
 
       r.titreSection("Argumentaire", couleur);
-      r.texte(arg?.texte || "Aucun argumentaire déposé.", { police: arg?.texte ? "normale" : "italique" });
+      r.texte(
+        !depotVisible ? "Brouillon non encore publié par l'étudiant·e." : arg?.texte || "Aucun argumentaire déposé.",
+        { police: depotVisible && arg?.texte ? "normale" : "italique" },
+      );
 
       r.titreSection(`Traces jointes (${tracesComp.length})`, couleur);
-      if (tracesComp.length === 0) r.texte("Aucune trace déposée.", { police: "italique", couleur: COULEURS.discret });
+      if (!depotVisible) r.texte("Brouillon non encore publié par l'étudiant·e.", { police: "italique", couleur: COULEURS.discret });
+      else if (tracesComp.length === 0) r.texte("Aucune trace déposée.", { police: "italique", couleur: COULEURS.discret });
       tracesComp.forEach((t, i) => {
         r.texte(`Trace ${i + 1} : ${t.titre}`, { police: "grasse" });
         if (t.description) r.texte(t.description, { taille: 9.5, couleur: COULEURS.discret, retrait: 12 });
