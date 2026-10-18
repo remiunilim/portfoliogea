@@ -1,67 +1,56 @@
 # Passation à Claude : projet PAÉ (Folio GEA)
 
-> **À l'attention de Claude, sur le nouveau poste.** Ce fichier résume tout le contexte du projet et l'historique du développement, fait sur un autre PC (Windows). Lis-le en entier avant toute action, puis lis `README.md`, qui reste la documentation de référence. Pour garder ce contexte d'une session à l'autre, tu peux en reprendre l'essentiel dans ta mémoire ou dans `CLAUDE.md`.
+> **À l'attention de Claude.** Ce fichier résume le contexte du projet et son historique. Lis-le en entier avant toute action, puis lis `README.md`, qui reste la documentation de référence pour les fonctionnalités et le déploiement. Pour garder ce contexte d'une session à l'autre, tu peux en reprendre l'essentiel dans ta mémoire.
 
 ## 1. Qui est l'utilisateur
 
-- Rémi Mougin, enseignant-chercheur en sciences de gestion / systèmes d'information, IUT du Limousin (université de Limoges), département **BUT GEA**.
+- Rémi Mougin (remi.mougin@unilim.fr), enseignant-chercheur en sciences de gestion / systèmes d'information, IUT du Limousin (université de Limoges), département **BUT GEA**.
 - Il écrit en français et attend des réponses en français, dans un ton clair et sans jargon inutile.
 - Il n'est pas développeur de métier : explique les choix techniques simplement et propose une recommandation plutôt qu'une liste d'options.
-- **Ne jamais piloter sa souris ni son clavier** pour tester (pas de SetCursorPos, mouse_event, SendKeys, xdotool…). Il travaille sur sa machine pendant les tests. Vérifie par des moyens passifs (aperçu navigateur, journaux, tests automatisés, captures sans interaction) ou demande-lui avant.
+- **Ne jamais piloter sa souris ni son clavier** pour tester (pas de SetCursorPos, mouse_event, SendKeys, xdotool…) : il travaille sur sa machine pendant les tests. Vérifie par des moyens passifs (aperçu navigateur isolé, journaux, tests automatisés) ou demande-lui avant.
 
 ## 2. Le projet en une phrase
 
 **Folio GEA** est l'application web de la **PAÉ** (démarche portfolio de compétences) du BUT GEA : les étudiants y déposent leur portfolio (argumentaires et traces PDF par compétence), leur enseignant référent l'évalue et suit deux rendez-vous par an, et l'administrateur gère les étudiants, les référents et le passage d'année. Elle s'inspire d'UniFolio (IUT de Troyes).
 
-## 3. Pile technique
+## 3. Deux branches, un seul code de fonctionnalités
+
+Le dépôt GitHub (`remiunilim/portfoliogea`) a **deux branches**, qui ne diffèrent que par la connexion :
+
+| Branche | Hébergement visé | Connexion |
+| --- | --- | --- |
+| `main` | Serveur de la DSI de l'université | SSO OpenID Connect (ou mot de passe transitoire en attendant) |
+| `ovh` | Hébergement indépendant (ex. OVH), sans attendre la DSI | Lien envoyé par mail (« magic link »), avec auto-inscription étudiante |
+
+Tout le reste (référentiels, dépôts, évaluation, export PDF/Excel, administration) est **identique** dans les deux. La branche `ovh` a été créée à partir de `main` via `git worktree` (dossier séparé `Folio-GEA-OVH` à côté du dossier principal) : en reprenant le projet, vérifie si ce worktree existe encore (`git worktree list`) avant d'en recréer un.
+
+## 4. Pile technique
 
 | Élément | Choix actuel |
 | --- | --- |
 | Framework | **Next.js 16.3.8** (App Router, Server Actions), React 19.2, TypeScript, Tailwind CSS 4 |
-| Base de données | **SQLite intégré à Node** (`node:sqlite`), fichier `data/portfolio.db` |
+| Base de données | **MariaDB** (pilote `mysql2`), réglages dans `.env.local` (voir `.env.example`) |
 | Fichiers | PDF déposés dans `data/fichiers/` |
 | PDF | `pdf-lib` (export du portfolio complet) |
-| Excel | `exceljs` (import des listes d'étudiants, modèle téléchargeable) |
-| Node.js | **22.5 minimum** (testé avec Node 24.19 sous Windows) |
-| Connexion | **simulée** par un cookie `folio_utilisateur` (choix du compte sur `/connexion`) |
+| Excel | `exceljs` (import des listes d'étudiants, export des notes) |
+| Mail | `nodemailer` (SMTP) |
+| Node.js | **22.5 minimum** |
+| Connexion (`main`) | SSO OpenID Connect (`openid-client`) ou mot de passe transitoire (scrypt natif), selon réglages |
+| Connexion (`ovh`) | Lien à usage unique envoyé par mail, pas de mot de passe ni de SSO |
 
 ⚠️ `AGENTS.md` prévient : **cette version de Next.js a des changements incompatibles avec ce que tu connais**. Avant d'écrire du code Next.js, lis le guide concerné dans `node_modules/next/dist/docs/` et respecte les avis de dépréciation. Ce bloc est réécrit automatiquement par `next dev`.
 
 `next.config.ts` : `serverExternalPackages: ["exceljs", "pdf-lib"]` et `serverActions.bodySizeLimit: "11mb"` (traces PDF de 10 Mo).
 
-## 4. Fonctionnalités réalisées (V1 complète en local)
+## 5. Fonctionnalités réalisées
 
-- **Référentiels** des parcours **GEMA, GPRH, GC2F** : tronc commun C1 à C3, C4-C5 propres au parcours. CG2P n'est pas encore configuré (affiche GEMA provisoirement). Apprentissages critiques numérotés AC + compétence + niveau + rang (ex. AC11.01).
-- **Étudiant** : onglet Présentation puis un onglet par compétence ; argumentaire saisi dans l'outil + 1 à 3 traces PDF (10 Mo max), renommables, remplaçables, supprimables à tout moment. Années précédentes accessibles et modifiables.
-- **Référent** : ne voit que ses étudiants ; tableau de promotion (état des dépôts, évaluations, brouillons à publier, nouveautés depuis la dernière visite, fil d'activité).
-- **Évaluation en deux temps** : brouillon puis publication (par compétence ou par année). Niveau qualitatif (Non acquis / En cours d'acquisition / Acquis / Dépassé) + **note sur 20 obligatoire** + commentaire. L'étudiant ne voit que la version publiée.
-- **Rendez-vous de suivi** (onglet *Suivi et notes*) : 2 par an, avec date, note /20 et compte rendu, brouillon puis publication. **Note finale = 10 % RDV 1 + 20 % RDV 2 + 70 % note de la compétence** (réglable dans `src/lib/referentiel.ts`, constante `RENDEZ_VOUS`).
-- **Administration** : import Excel/CSV (colonnes Nom, Prénom, Email étudiant, Année, Parcours, Enseignant référent, Email enseignant, Groupe facultatif) avec aperçu ligne par ligne ; ajout manuel ; affectation des référents ; fiche de compte (modifier, désactiver, supprimer avec confirmation par saisie du nom) ; **passage d'année et réaffectations groupés**.
-- **Notifications** dans l'outil (cloche) + préférence de courriel par utilisateur (à chaque fois / récapitulatif quotidien / jamais). Les courriels sont mis **en file d'attente** (table `courriels`) mais **pas encore envoyés**.
-- **Export PDF** du portfolio complet : couverture, sommaire paginé, présentation, une page par compétence et par année avec évaluation + traces intégrées (étiquetées en pied de page), page « Rendez-vous et notes finales » par année.
-- **Journal** de toutes les actions (qui, quoi, quand).
-- **Thème clair / sombre** (bouton lune / soleil).
-- **Jeu de démonstration** créé au premier lancement : 3 enseignants (dont une administratrice), 12 étudiants en BUT1-2-3, dont 2 GPRH (Sarah Benali, Maxime Laurent) et 2 GC2F (Julie Perrin, Antoine Masson). Supprimer `data/` pour repartir de zéro ; les anciennes bases sont migrées automatiquement au démarrage.
+Voir `README.md` (« Fonctionnalités ») pour le détail à jour : référentiels des 4 parcours (GEMA, GPRH, GC2F, CG2P, ce dernier masqué tant que l'administrateur ne l'active pas), dépôt et évaluation en deux temps (brouillon/publication, niveau + note/20 + commentaire), rendez-vous de suivi et notes finales pondérées, administration complète (import Excel, ajout manuel, fiches de compte, passage d'année groupé, archivage/suppression groupés), notifications (outil + courriel, coupe-circuit désactivé par défaut), export PDF du portfolio complet, **export Excel des notes** (par enseignant ou par l'administrateur), journal de toutes les actions, thème clair/sombre.
 
-## 5. Organisation du code
+Spécifique à `ovh` : auto-inscription étudiante après vérification de l'adresse mail (`/connexion/creer-profil`), restreinte par défaut à `unilim.fr` (`EMAIL_ETUDIANTS_DOMAINES`).
 
-| Fichier | Rôle |
-| --- | --- |
-| `src/lib/referentiel.ts` | Compétences, niveaux, AC des parcours, pondération des notes (source unique) |
-| `src/lib/db.ts` | Schéma SQLite (tables `utilisateurs`, `presentations`, `argumentaires`, `traces`, `evaluations`, `journal`, `consultations`, `notifications`, `rendez_vous`, `courriels`), migrations, requêtes, jeu de démo |
-| `src/lib/session.ts` | Connexion simulée et règles d'accès (`estEnseignant`, `estAdmin`, `suitEtudiant`, `peutConsulter`, `peutModifier`) |
-| `src/lib/export-pdf.ts` | Assemblage du PDF complet |
-| `src/lib/import-etudiants.ts` | Lecture, contrôle et application de l'import, modèle Excel |
-| `src/lib/pdf-demo.ts`, `affichage.ts`, `theme.ts` | PDF de démo, aides d'affichage, thème |
-| `src/app/actions.ts` | Server Actions (dépôts, évaluations, publication, affectations, journal) |
-| `src/app/portfolio/[etudiantId]` | Portfolio à onglets |
-| `src/app/enseignant` | Tableau de suivi |
-| `src/app/admin/affectations`, `admin/comptes/[id]`, `admin/passage`, `admin/modele-import` | Administration |
-| `src/app/compte`, `notifications`, `connexion` | Mon compte, notifications, connexion simulée |
-| `src/app/fichiers/[id]`, `src/app/export/[etudiantId]` | Accès contrôlé aux traces et à l'export PDF |
-| `src/components/` | `portfolio.tsx`, `admin.tsx`, `formulaires.tsx`, `EnTete.tsx`, `BoutonTheme.tsx`, `useActionConservee.ts` |
+## 6. Organisation du code
 
-Environ 5 700 lignes dans `src/`.
+Voir `README.md` (« Organisation du code ») pour le tableau à jour, qui diffère légèrement entre `main` (`src/lib/oidc.ts`, `src/lib/mdp.ts`) et `ovh` (`src/lib/lien-connexion.ts`, `src/app/connexion/creer-profil`).
 
 ### Maquette autonome (pour la démonstration)
 
@@ -72,57 +61,45 @@ Environ 5 700 lignes dans `src/`.
   - Maquette Folio GEA : https://claude.ai/artifact/2BPbda4wvccXMufmotaafe
   - Guide utilisateur Folio GEA : https://claude.ai/artifact/PjighjiPnwyMTdrdh4B26v
 
-## 6. Historique
+## 7. Historique (résumé)
 
 | Date | Étape |
 | --- | --- |
-| 13/09/2026 | Création du projet Next.js (`erp-pedagogique`) |
-| fin sept. 2026 | Référentiels, dépôts, évaluation, export PDF, journal |
-| 01/10/2026 | Import Excel, administration des comptes, passage d'année, notifications, thème sombre ; guide utilisateur publié ; maquette autonome et ses tests |
-| 02/10/2026 | Dernière mise à jour de la maquette publiée |
-| 06/10/2026 | Rendez-vous avec la **DSI** ; README complété par la note de reprise sous Linux |
-| 15/10/2026 | Ce fichier de passation ; reprise prévue sur un autre PC (Linux) |
-
-## 7. Recommandations de la DSI (06/10/2026) et décision ouverte
-
-La DSI demande : **développer sous Linux** (pour dupliquer le projet sur leur serveur), **SSO OpenID Connect** (identifiants de l'université), pile **Apache + MariaDB** (ils ont cité MAMP, donc pensent PHP).
-
-**Décision encore ouverte** : l'appli est en Node.js, pas en PHP.
-
-- **Voie A (recommandée)** : garder Node.js. Passer SQLite → MariaDB (`src/lib/db.ts`), remplacer la connexion simulée par OpenID Connect (`src/lib/session.ts`, `src/app/connexion`), Apache en **reverse proxy** devant Node.js lancé par un **service systemd**.
-- **Voie B** : réécriture en PHP (Symfony) sur la pile standard de la DSI.
-
-**Première chose à faire à la reprise : demander à l'utilisateur la réponse de la DSI** à la question « Pouvez-vous héberger une application Node.js 22 derrière Apache (en relais), avec MariaDB ? ».
-
-Pour OpenID Connect, il faudra obtenir de la DSI : l'adresse du fournisseur (issuer), un client ID et un secret, l'URL de retour à déclarer, et les attributs transmis (identifiant, email, nom, prénom, statut étudiant / personnel).
-
-Note : le commentaire de `src/lib/session.ts` parle encore du « CAS de l'université » ; la cible est désormais **OpenID Connect**.
+| 13/09/2026 | Création du projet Next.js (`erp-pedagogique`), SQLite, connexion simulée |
+| sept.–oct. 2026 | Référentiels, dépôts, évaluation, export PDF, journal, import Excel, administration, passage d'année, notifications, thème sombre, maquette autonome |
+| 06/10/2026 | Rendez-vous avec la DSI : Node.js derrière Apache, MariaDB possible (pas de réécriture PHP) |
+| 15/10/2026 | Passage SQLite → MariaDB ; modèles Apache/systemd ; SSO OpenID Connect câblé (en attente des réglages réels de la DSI) |
+| 16–17/10/2026 | CG2P configuré (masqué par défaut) ; envoi réel des courriels (coupe-circuit désactivé par défaut) ; Apache/systemd vérifiés en conditions réelles (WSL) ; connexion par mot de passe transitoire ; page d'archivage/suppression groupés ; projet mis sous Git et sauvegardé sur GitHub (`remiunilim/portfoliogea`) |
+| 18/10/2026 | Export Excel des notes (enseignant et administrateur) ; vérification DSI (rien n'a dérivé) ; **création de la branche `ovh`** (connexion par lien mail, puis auto-inscription étudiante sécurisée par vérification d'email, restreinte à `unilim.fr`) ; nettoyage de la base `main` pour ne garder que le compte administrateur de l'utilisateur (`remi.mougin@unilim.fr`) |
 
 ## 8. Reste à faire
 
-1. Obtenir la réponse de la DSI (voie A ou B).
-2. Connexion SSO OpenID Connect (remplace `session.ts` et `/connexion`).
-3. Base MariaDB à la place de SQLite ; configuration Apache, service systemd, sauvegardes.
-4. Envoi réel des courriels en file d'attente (SMTP de l'université), dont le récapitulatif quotidien.
-5. Référentiel CG2P et mise à jour vers le nouveau programme national.
-6. Mettre le projet sous Git (idéalement le GitLab de l'université) : **le dossier n'est pas encore un dépôt Git**.
+1. Obtenir de la DSI les réglages réels du SSO (issuer, client ID, secret, URL de retour) et tester `main` avec le vrai fournisseur.
+2. Déploiement sur le vrai serveur de la DSI (`main`) et/ou sur un serveur OVH (`ovh`) : nom de domaine, certificat HTTPS, sauvegardes MariaDB.
+3. Renseigner un vrai SMTP (université pour `main`, service transactionnel recommandé pour `ovh`) puis activer l'envoi des courriels.
+4. Nouvelle version du référentiel le jour où le nouveau programme national BUT GEA sera publié.
+5. Activer CG2P quand l'IUT ouvrira ce parcours.
 
-## 9. Installer sur le nouveau poste (Ubuntu)
+## 9. Installer sur un nouveau poste
 
-Copier le dossier **sans** `node_modules/`, `.next/` ni `data/` (recréés automatiquement). Les dossiers `desktop-widget/`, `service-widget/` et `rive/` sont **d'autres projets** (outils de bureau Electron personnels), sans lien avec Folio GEA : inutile de les copier pour la PAÉ.
+Le projet est sur GitHub : `git clone` (ou `git worktree add` pour une seconde branche) plutôt que copier le dossier.
 
 ```bash
+git clone https://github.com/remiunilim/portfoliogea.git
+cd portfoliogea
 sudo apt install nodejs npm apache2 mariadb-server   # ou Node.js 22 via NodeSource si la version d'Ubuntu est trop ancienne
 node -v                                              # 22.5 minimum
+cp .env.example .env.local                           # puis renseigner les identifiants MariaDB (et APP_BASE_URL/SMTP_* sur ovh)
 npm install
 npm run dev                                          # http://localhost:3000
 ```
 
-Vérifications rapides après installation : la page `/connexion` liste les comptes de démo ; se connecter en administratrice, ouvrir *Étudiants et affectations*, puis un portfolio, et lancer l'export PDF.
+Vérifications rapides après installation : se connecter, ouvrir *Étudiants et affectations*, ajouter un·e étudiant·e, ouvrir son portfolio, déposer une trace, évaluer et publier, lancer l'export PDF puis l'export Excel.
 
 ## 10. Méthode de travail attendue
 
 - Lire le code existant avant de modifier, garder le style (noms et commentaires **en français**, Server Actions, composants dans `src/components/`).
-- Mettre à jour `README.md` à chaque nouvelle fonctionnalité (il sert de documentation).
+- Mettre à jour `README.md` à chaque nouvelle fonctionnalité (il sert de documentation) — et ce fichier pour les changements de contexte ou d'historique notables.
+- Toute modification pertinente pour `main` doit être évaluée pour `ovh` aussi (et inversement) : les deux branches partagent presque tout le code, seule l'authentification diffère.
 - Après une modification visible, vérifier dans le navigateur (aperçu du serveur de dev) plutôt que de demander à l'utilisateur de tester.
 - Si la maquette doit suivre une évolution : modifier `maquette/source/folio-gea.html`, relancer ses tests, régénérer la version autonome.

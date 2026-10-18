@@ -2,6 +2,8 @@
 
 Plateforme de dépôt, de suivi et d'évaluation des portfolios des étudiants du BUT GEA. Les référentiels des 4 parcours **GEMA, GPRH, GC2F et CG2P** sont configurés (tronc commun C1 à C3, C4-C5 propres à chaque parcours), d'après le PPN BUT GEA 2022. **CG2P reste masqué des listes de choix tant que l'administrateur ne l'a pas activé** (page *Étudiants et affectations*) : aucun établissement ne l'ouvre encore à l'IUT du Limousin. L'interface propose un **thème clair et un thème sombre** (bouton lune / soleil dans l'en-tête). Elle s'inspire d'UniFolio (IUT de Troyes) et de la démarche portfolio présentée lors des cafés pédagogiques.
 
+**Deux versions existent** : celle-ci (branche `main`), pensée pour un hébergement chez la DSI de l'université (SSO OpenID Connect) ; et la branche [`ovh`](https://github.com/remiunilim/portfoliogea/tree/ovh), une variante autonome pour un hébergement indépendant (ex. OVH), où la connexion se fait par lien envoyé par mail et où un·e étudiant·e peut créer son propre profil. Le reste (référentiels, évaluation, export PDF/Excel, administration) est identique dans les deux.
+
 ## Lancer en local
 
 Il faut **Node.js 22.5** ou une version plus récente, et une **base MariaDB** accessible (locale ou distante).
