@@ -1,12 +1,14 @@
-# Folio GEA : portfolio de compétences du BUT GEA (PAÉ)
+# Folio GEA : portfolio de compétences du BUT GEA (PAÉ) — version OVH
 
 Plateforme de dépôt, de suivi et d'évaluation des portfolios des étudiants du BUT GEA. Les référentiels des 4 parcours **GEMA, GPRH, GC2F et CG2P** sont configurés (tronc commun C1 à C3, C4-C5 propres à chaque parcours), d'après le PPN BUT GEA 2022. **CG2P reste masqué des listes de choix tant que l'administrateur ne l'a pas activé** (page *Étudiants et affectations*) : aucun établissement ne l'ouvre encore à l'IUT du Limousin. L'interface propose un **thème clair et un thème sombre** (bouton lune / soleil dans l'en-tête). Elle s'inspire d'UniFolio (IUT de Troyes) et de la démarche portfolio présentée lors des cafés pédagogiques.
+
+**Cette branche (`ovh`) est une variante autonome**, pensée pour un hébergement indépendant de la DSI (ex. OVH), à déployer sans attendre le SSO de l'université. Seule différence avec la branche principale : la connexion se fait par un **lien envoyé par mail** (comme un « magic link »), pas par mot de passe ni SSO — voir [Connexion et déploiement](#connexion-et-déploiement) plus bas. Tout le reste (référentiels, évaluation, export PDF/Excel, administration) est identique.
 
 ## Lancer en local
 
 Il faut **Node.js 22.5** ou une version plus récente, et une **base MariaDB** accessible (locale ou distante).
 
-1. Copier `.env.example` en `.env.local` et renseigner les identifiants de connexion à MariaDB (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`). La base elle-même est créée automatiquement au premier démarrage si elle n'existe pas encore — il suffit que l'utilisateur indiqué ait le droit de la créer (ou qu'elle existe déjà et que l'utilisateur y ait tous les droits).
+1. Copier `.env.example` en `.env.local` et renseigner les identifiants de connexion à MariaDB (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`). La base elle-même est créée automatiquement au premier démarrage si elle n'existe pas encore — il suffit que l'utilisateur indiqué ait le droit de la créer (ou qu'elle existe déjà et que l'utilisateur y ait tous les droits). Renseigner aussi `APP_BASE_URL` et les réglages `SMTP_*` : **indispensables ici**, la connexion elle-même passe par un lien envoyé par mail (voir plus bas).
 2. Installer les dépendances et lancer le serveur :
 
 ```bash
@@ -32,7 +34,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   - fiche de chaque compte : modification (identité, email, année, parcours, groupe, référent, droits), désactivation (sortie de formation, départ : accès fermé, données conservées), suppression définitive (un étudiant avec tout son portfolio ; un enseignant seulement s'il n'a laissé aucune évaluation ni action), avec saisie du nom pour confirmer ;
   - **passage d'année et réaffectations groupés** (page dédiée) : filtre par année, par référent ou par nom, sélection multiple, puis changement d'année (« année suivante » ou année précise), de parcours, de référent ou de groupe ; désactivation groupée en fin de formation. Chaque changement est inscrit dans le journal de l'étudiant.
   - **archivage et suppression groupés** (page dédiée *Archivage et suppression*) : même filtre par année/référent/nom pour viser une cohorte entière (ou un·e seul·e étudiant·e), puis archivage (accès fermé, portfolio conservé) ou suppression définitive de tous les portfolios sélectionnés — cette dernière demande de taper « SUPPRIMER » pour confirmer, après avoir affiché la liste exacte des personnes concernées.
-- **Notifications** : l'étudiant est prévenu dans l'outil (cloche dans l'en-tête) dès qu'une évaluation est publiée ; le référent, dès qu'un de ses étudiants dépose ou modifie un argumentaire, une trace ou sa présentation (une seule notification par dépôt tant qu'elle n'est pas lue). Chacun choisit sur sa page *Mon compte* (clic sur son nom) de recevoir aussi un courriel : à chaque fois, en récapitulatif quotidien (enseignants) ou jamais. Les courriels sont placés dans une file d'attente et expédiés par SMTP (voir `.env.example`) — **mais l'envoi réel reste coupé pour tout le monde tant que l'administrateur ne l'a pas activé** (page *Étudiants et affectations*, section « Envoi des courriels ») : par défaut, personne n'en reçoit, et la préférence de chacun est verrouillée sur *Mon compte* en attendant.
+- **Notifications** : l'étudiant est prévenu dans l'outil (cloche dans l'en-tête) dès qu'une évaluation est publiée ; le référent, dès qu'un de ses étudiants dépose ou modifie un argumentaire, une trace ou sa présentation (une seule notification par dépôt tant qu'elle n'est pas lue). Chacun choisit sur sa page *Mon compte* (clic sur son nom) de recevoir aussi un courriel : à chaque fois, en récapitulatif quotidien (enseignants) ou jamais. Les courriels de notification sont placés dans une file d'attente et expédiés par SMTP (voir `.env.example`) — **mais l'envoi réel reste coupé pour tout le monde tant que l'administrateur ne l'a pas activé** (page *Étudiants et affectations*, section « Envoi des courriels ») : par défaut, personne n'en reçoit, et la préférence de chacun est verrouillée sur *Mon compte* en attendant. Ce réglage ne concerne pas les courriels de connexion, toujours envoyés immédiatement (voir plus bas).
 - **Export PDF** : l'onglet *Portfolio complet* produit un seul PDF qui contient, dans l'ordre :
   - une couverture et un sommaire paginé ;
   - la présentation de l'étudiant ;
@@ -40,6 +42,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   - pour chaque année, une page « Rendez-vous de suivi et notes finales ».
 
   Chaque page de trace porte en pied de page une étiquette qui situe la trace dans le portfolio.
+- **Export Excel des notes** : sur la page *Mes étudiants* / *Suivi des portfolios*, chaque enseignant·e exporte les notes (brouillons et publiées) de ses étudiants, une feuille par année de BUT ; l'administrateur exporte tous les étudiants, ou un sous-ensemble filtré par référent ou parcours.
 - **Journal** : chaque dépôt, modification, évaluation ou publication est tracé (qui, quoi, quand). Pour les fichiers, seule la dernière version est conservée.
 
 ## Organisation du code
@@ -49,9 +52,9 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 | `src/lib/referentiel.ts` | Compétences, niveaux et apprentissages critiques des 4 parcours (GEMA, GPRH, GC2F, CG2P), pondération des notes (source unique, à mettre à jour avec le nouveau programme national) |
 | `src/lib/db.ts` | Schéma MariaDB, requêtes (toutes asynchrones) et jeu de démonstration |
 | `src/lib/session.ts` | Session (cookie) et règles d'accès (étudiant, référent, administrateur) |
-| `src/lib/oidc.ts`, `src/app/connexion/oidc` | Connexion SSO OpenID Connect (démarrage et retour) |
-| `src/lib/mdp.ts`, `src/components/connexion.tsx` | Connexion par mot de passe (hachage scrypt, formulaire) — transitoire, avant le SSO |
+| `src/lib/lien-connexion.ts`, `src/app/connexion/lien`, `src/components/connexion.tsx` | Connexion par lien envoyé par mail (jeton à usage unique, 20 min) |
 | `src/lib/export-pdf.ts` | Assemblage du portfolio en un seul PDF (pdf-lib) |
+| `src/lib/export-notes.ts`, `src/app/enseignant/export` | Export Excel des notes (ExcelJS) |
 | `src/lib/mail.ts`, `src/lib/courriels.ts` | Envoi SMTP et vidage de la file de courriels (`src/app/api/cron/courriels`, déclenché périodiquement, voir `deploy/`) |
 | `src/lib/import-etudiants.ts` | Lecture, contrôle et application de l'import des listes d'étudiants (ExcelJS), modèle Excel |
 | `src/app/notifications` | Notifications de l'utilisateur |
@@ -68,27 +71,25 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
 | `maquette/folio-gea-maquette.html` | Maquette autonome à partager (un seul fichier, données dans le navigateur) |
 | `maquette/source/` | Source de la maquette publiée sur Claude, ses tests (`node maquette/source/test-maquette.cjs`) et le script qui produit la version autonome (`node maquette/source/autonome.cjs maquette/source/folio-gea.html maquette/folio-gea-maquette.html`) |
 
-## Déploiement chez la DSI
+## Connexion et déploiement
 
-**Réponse de la DSI (15/10/2026)** : Node.js 22 peut être hébergé derrière Apache (en relais) avec MariaDB. La **voie A est confirmée** : l'application reste en Next.js (Node.js), pas de réécriture en PHP.
+Cette version se déploie **sans dépendre de la DSI** (pas de SSO universitaire à attendre) : elle garde exactement la même infrastructure que la branche principale (Next.js/Node.js derrière Apache, MariaDB, systemd), mais remplace la connexion par un **lien envoyé par mail**, sur le principe d'un « magic link » :
 
-- **Base de données** : MariaDB à la place de SQLite — fait (`src/lib/db.ts`, pilote `mysql2`). Réglages de connexion dans `.env.local` (voir `.env.example`).
-- **Hébergement** : Apache en relais (reverse proxy) devant Node.js géré par un service systemd. Modèles prêts à adapter dans `deploy/`, **vérifiés en conditions réelles** (Ubuntu, Apache, MariaDB et systemd dans un environnement Linux de test — build de production, service `folio-gea` démarré par systemd, relais Apache fonctionnel de bout en bout) :
-  - `deploy/apache-folio-gea.conf` : site Apache (reverse proxy + HTTPS)
-  - `deploy/folio-gea.service` : service systemd (lance `next start`) — bien suivre l'ordre des commandes dans ses commentaires : le dossier `data/` doit exister (avec les bons droits) **avant** le premier démarrage, sinon le service échoue (erreur systemd 226/NAMESPACE)
-  - `deploy/folio-gea-courriels.service`/`.timer` et `deploy/folio-gea-courriels-quotidien.service`/`.timer` : vidage périodique de la file de courriels
-- **Connexion SSO OpenID Connect** : faite (`src/lib/oidc.ts`, routes `src/app/connexion/oidc`), mais **pas encore testée avec le vrai fournisseur de la DSI** — en attente de ses réglages. Tant que `OIDC_ISSUER` (et les autres variables `OIDC_*` de `.env.example`) ne sont pas renseignées, `/connexion` reste en mode démonstration (choix d'un compte fictif) ; dès qu'elles le sont, elle affiche un seul bouton « Se connecter avec le compte de l'université ». Au premier vrai login, le compte est reconnu par son **email** (celui déjà enregistré via l'import Excel ou l'ajout manuel) puis l'identifiant OpenID Connect y est lié pour les connexions suivantes. **Aucun compte n'est créé automatiquement** : un compte universitaire inconnu de Folio GEA affiche un message invitant à contacter l'administrateur (l'étudiant·e ou l'enseignant·e doit déjà avoir été importé·e ou ajouté·e). À demander à la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, et l'URL de retour à déclarer chez eux (`OIDC_REDIRECT_URI`, doit correspondre exactement à ce qui est configuré côté DSI).
-- **Connexion par mot de passe (transitoire)** : pour un déploiement avec de vrais comptes
-  **avant** que le SSO ne soit branché, sans attendre la DSI. Tant que `/connexion` affichait la
-  liste des comptes à choisir (mode démonstration), n'importe qui pouvait se connecter à la
-  place de n'importe qui, sans mot de passe — ⚠️ **à n'utiliser qu'avec des comptes fictifs**.
-  Activer « Connexion par mot de passe » (page *Étudiants et affectations*) remplace cette liste
-  par un vrai formulaire email + mot de passe. Chaque personne a besoin d'un mot de passe défini
-  par l'administrateur sur sa fiche de compte (aucun courriel n'est envoyé automatiquement : à
-  communiquer directement) ; elle peut ensuite le changer elle-même sur *Mon compte*. Ce réglage
-  se désactive automatiquement (masqué) une fois le SSO configuré (`OIDC_*` renseignées).
+- La personne saisit son adresse mail universitaire sur `/connexion`.
+- Si un compte existe pour cette adresse (créé au préalable par l'administrateur : import Excel ou ajout manuel, exactement comme avant), elle reçoit un mail avec un lien de connexion **valable 20 minutes et à usage unique**.
+- En cliquant, elle est connectée directement — aucun mot de passe à retenir, aucun compte à créer soi-même.
+- Le message affiché après la demande est **volontairement identique que l'adresse soit connue ou non** (pour ne pas révéler quelles adresses sont enregistrées), et un deuxième envoi est bloqué pendant une minute si la personne redemande un lien trop vite (anti-spam basique).
 
-**Sur le serveur Linux (Ubuntu)** :
+**Conséquence importante** : sans adresse mail enregistrée, une personne ne peut pas se connecter (contrairement à la branche principale, où c'était seulement nécessaire pour les notifications ou le SSO). L'import et l'ajout manuel le rappellent désormais clairement. L'administrateur peut toujours renseigner ou corriger une adresse a posteriori sur la fiche du compte.
+
+### À préparer avant de déployer
+
+- **Un nom de domaine et un certificat HTTPS** (ex. Let's Encrypt / Certbot) : `deploy/apache-folio-gea.conf` est à adapter avec le nom de domaine réel.
+- **`APP_BASE_URL`** (`.env.local`) : l'adresse publique exacte de l'application (ex. `https://folio-gea.exemple.fr`), utilisée pour construire le lien envoyé par mail. Sans certificat ni domaine, la connexion fonctionne quand même mais le lien renverra vers une adresse non chiffrée — à éviter en usage réel.
+- **Un service d'envoi de mail fiable** (`SMTP_*` dans `.env.local`) : **indispensable dès le premier jour**, puisque c'est le seul moyen de se connecter. Un service d'envoi transactionnel (plutôt que le SMTP d'une messagerie classique) est recommandé : plus fiable, et moins susceptible d'être classé comme spam par les messageries des étudiants et enseignants. Les VPS de certains hébergeurs (OVH compris) bloquent par défaut le port SMTP sortant 25 pour lutter contre le spam : vérifier auprès de l'hébergeur, ou passer par un service tiers qui utilise un autre port (587/465).
+- **MariaDB** : identique à la branche principale (`DB_*` dans `.env.local`).
+
+### Sur le serveur Linux (Ubuntu), identique à la branche principale
 
 ```bash
 sudo apt install nodejs npm apache2 mariadb-server   # ou Node.js 22 via NodeSource si la version d'Ubuntu est plus ancienne
@@ -97,10 +98,14 @@ npm install
 npm run build && npm run start                       # ou via le service systemd (deploy/folio-gea.service)
 ```
 
+Modèles prêts à adapter dans `deploy/` (**vérifiés en conditions réelles** sur un Linux de test — build de production, service `folio-gea` démarré par systemd, relais Apache fonctionnel de bout en bout) :
+- `deploy/apache-folio-gea.conf` : site Apache (reverse proxy + HTTPS)
+- `deploy/folio-gea.service` : service systemd (lance `next start`) — bien suivre l'ordre des commandes dans ses commentaires : le dossier `data/` doit exister (avec les bons droits) **avant** le premier démarrage, sinon le service échoue (erreur systemd 226/NAMESPACE)
+- `deploy/folio-gea-courriels.service`/`.timer` et `deploy/folio-gea-courriels-quotidien.service`/`.timer` : vidage périodique de la file des courriels de *notification* (sans effet sur la connexion, envoyée immédiatement)
+
 ## Reporté aux étapes suivantes
 
-- Essai de la connexion SSO OpenID Connect avec le vrai fournisseur de la DSI, une fois ses réglages reçus
-- Déploiement sur le vrai serveur de la DSI (modèles `deploy/` vérifiés en conditions réelles sur un Linux de test, mais pas encore sur ce serveur) : nom de domaine, certificat HTTPS, sauvegardes de la base MariaDB
-- Renseigner les réglages SMTP de l'université (`.env.example`) puis activer l'envoi des courriels (page *Étudiants et affectations*) quand le moment sera venu
+- Choix et mise en place du serveur OVH (VPS ou Public Cloud), nom de domaine, certificat HTTPS, sauvegardes de la base MariaDB
+- Choix d'un service d'envoi de mail transactionnel fiable
 - Nouvelles versions du référentiel, le jour où le nouveau programme national sera publié
 - Activer CG2P (page *Étudiants et affectations* → section « Parcours CG2P ») quand l'IUT ouvrira ce parcours

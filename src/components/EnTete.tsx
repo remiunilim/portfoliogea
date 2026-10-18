@@ -61,8 +61,8 @@ export async function EnTete({ utilisateur }: { utilisateur: Utilisateur }) {
             </div>
           </Link>
           <form action={seDeconnecter}>
-            <button className="rounded border border-line px-3 py-1.5 text-xs hover:bg-background" title="Mode démonstration : choisir un autre compte">
-              Changer de compte
+            <button className="rounded border border-line px-3 py-1.5 text-xs hover:bg-background" title="Se déconnecter">
+              Se déconnecter
             </button>
           </form>
         </div>

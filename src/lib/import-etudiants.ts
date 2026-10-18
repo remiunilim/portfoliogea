@@ -14,7 +14,7 @@ import {
 
 // Import d'une liste d'étudiants (Excel ou CSV) avec les colonnes :
 // Nom, Prénom, Email étudiant, Année, Parcours, Enseignant référent, Email enseignant — et, facultativement, Groupe.
-// Les adresses servent aux notifications par courriel ; celle de l'enseignant identifie aussi le référent.
+// Les adresses servent à la connexion (lien envoyé par mail) et aux notifications ; celle de l'enseignant identifie aussi le référent.
 // L'import se fait en deux temps : un aperçu ligne par ligne, puis l'application.
 
 export const PARCOURS_GEA = ["GEMA", "GC2F", "GPRH", "CG2P"] as const;
@@ -220,7 +220,7 @@ export async function analyserImport(lignes: LigneBrute[], creerEnseignants: boo
     else vus.set(cle, l.numero);
 
     // Adresses
-    if (!email) avertissements.push("Email étudiant absent : pas de notification par courriel.");
+    if (!email) avertissements.push("Email étudiant absent : la connexion se fait par lien envoyé par mail, cet·te étudiant·e ne pourra pas se connecter tant qu'une adresse n'est pas renseignée.");
     else if (!EMAIL_VALIDE.test(email)) erreurs.push(`Email étudiant « ${l.email} » invalide.`);
     else if (emailsVus.has(email)) erreurs.push(`Email étudiant déjà utilisé ligne ${emailsVus.get(email)}.`);
     else emailsVus.set(email, l.numero);
@@ -254,7 +254,9 @@ export async function analyserImport(lignes: LigneBrute[], creerEnseignants: boo
         if (emailReferent && (await emailExiste(emailReferent))) {
           erreurs.push(`L'adresse ${emailReferent} appartient déjà à un autre compte (éventuellement désactivé).`);
         }
-        avertissements.push(`Enseignant « ${referentNom} » inconnu : il sera créé${emailReferent ? "" : " sans email"}.`);
+        avertissements.push(
+          `Enseignant « ${referentNom} » inconnu : il sera créé${emailReferent ? "" : " sans email, et ne pourra donc pas se connecter tant qu'une adresse n'est pas renseignée sur sa fiche"}.`,
+        );
       } else {
         erreurs.push(`Référent « ${referentTexte} » inconnu. Ajoutez-le ou cochez « créer les enseignants inconnus ».`);
       }
@@ -385,11 +387,11 @@ export async function genererModele(): Promise<Buffer> {
   aide.addRows([
     ["Colonne", "Contenu attendu"],
     ["Nom, Prénom", "Obligatoires. Un étudiant déjà présent (même email, ou même prénom et nom) est mis à jour."],
-    ["Email étudiant", "Adresse universitaire de l'étudiant : sert aux notifications (évaluation publiée…)."],
+    ["Email étudiant", "Adresse universitaire de l'étudiant : sert à la connexion (lien envoyé par mail) et aux notifications."],
     ["Année", "1, 2, 3 ou BUT1, BUT2, BUT3 (obligatoire)."],
     ["Parcours", `${PARCOURS_GEA.join(", ")}. Vide = GEMA.`],
     ["Enseignant référent", "« Prénom Nom » ou « NOM Prénom ». Vide (avec Email enseignant vide) = affectation inchangée."],
-    ["Email enseignant", "Adresse du référent : l'identifie sans ambiguïté et sert à ses notifications. Complète l'adresse d'un enseignant qui n'en avait pas."],
+    ["Email enseignant", "Adresse du référent : l'identifie sans ambiguïté, sert à sa connexion et à ses notifications. Complète l'adresse d'un enseignant qui n'en avait pas."],
     ["Groupe", "Facultatif (TD1, TP2…)."],
   ]);
   aide.getColumn(1).width = 22;

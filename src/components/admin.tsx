@@ -7,8 +7,6 @@ import {
   ajouterEtudiant,
   archivageGroupe,
   changerActivationAction,
-  changerMotDePasseAction,
-  definirMotDePasseAction,
   enregistrerPreferences,
   importerEtudiants,
   modifierCompteAction,
@@ -209,7 +207,7 @@ export function FormAjoutEtudiant({ enseignants, parcours }: { enseignants: Opti
           ))}
         </select>
         <input name="groupe" placeholder="Groupe (facultatif)" aria-label="Groupe" className={champ} />
-        <input name="email" type="email" placeholder="Email étudiant (pour les notifications)" aria-label="Email étudiant" className={`${champ} sm:col-span-2`} />
+        <input name="email" type="email" placeholder="Email étudiant (pour la connexion et les notifications)" aria-label="Email étudiant" className={`${champ} sm:col-span-2`} />
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button className={bouton} disabled={enCours}>
@@ -228,7 +226,7 @@ export function FormAjoutEnseignant() {
       <div className="grid gap-3 sm:grid-cols-2">
         <input name="nom" required placeholder="Nom *" aria-label="Nom" className={champ} />
         <input name="prenom" required placeholder="Prénom *" aria-label="Prénom" className={champ} />
-        <input name="email" type="email" placeholder="Email enseignant (pour les notifications)" aria-label="Email enseignant" className={`${champ} sm:col-span-2`} />
+        <input name="email" type="email" placeholder="Email enseignant (pour la connexion et les notifications)" aria-label="Email enseignant" className={`${champ} sm:col-span-2`} />
       </div>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" name="admin" value="1" className="accent-[var(--primary)]" />
@@ -314,7 +312,7 @@ export function FormModifierCompte({ compte, enseignants, parcours }: { compte: 
           <input name="prenom" required defaultValue={compte.prenom} className={champ} />
         </label>
         <label className="block text-sm sm:col-span-2">
-          <span className="mb-1 block font-medium">Adresse mail (notifications)</span>
+          <span className="mb-1 block font-medium">Adresse mail (connexion et notifications)</span>
           <input
             name="email"
             type="email"
@@ -423,61 +421,6 @@ export function FormSuppression({ id, nom, role, resume }: { id: string; nom: st
           disabled={enCours || saisie.trim().toLowerCase() !== nom.toLowerCase()}
         >
           Supprimer définitivement
-        </button>
-        <Retour etat={etat} />
-      </div>
-    </form>
-  );
-}
-
-// ---------- Mot de passe (transitoire, en attendant le SSO) ----------
-
-export function FormDefinirMotDePasse({ id, nom }: { id: string; nom: string }) {
-  const [etat, action, enCours] = useActionConservee(definirMotDePasseAction, null);
-  const [motDePasse, setMotDePasse] = useState("");
-  return (
-    <form onSubmit={action} className="space-y-3">
-      <input type="hidden" name="id" value={id} />
-      <p className="text-sm text-muted">
-        Définit ou réinitialise le mot de passe de connexion de {nom}. À lui communiquer directement (aucun courriel
-        n&apos;est envoyé automatiquement).
-      </p>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Nouveau mot de passe (8 caractères minimum)</span>
-        <input
-          name="mot_de_passe"
-          type="text"
-          value={motDePasse}
-          onChange={(e) => setMotDePasse(e.target.value)}
-          autoComplete="off"
-          className={champ}
-        />
-      </label>
-      <div className="flex flex-wrap items-center gap-3">
-        <button className={boutonSecondaire} disabled={enCours || motDePasse.length < 8}>
-          Définir le mot de passe
-        </button>
-        <Retour etat={etat} />
-      </div>
-    </form>
-  );
-}
-
-export function FormChangerMotDePasse() {
-  const [etat, action, enCours] = useActionConservee(changerMotDePasseAction, null);
-  return (
-    <form onSubmit={action} className="space-y-3">
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Mot de passe actuel</span>
-        <input name="mot_de_passe_actuel" type="password" autoComplete="current-password" className={champ} />
-      </label>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">Nouveau mot de passe (8 caractères minimum)</span>
-        <input name="nouveau_mot_de_passe" type="password" autoComplete="new-password" className={champ} />
-      </label>
-      <div className="flex flex-wrap items-center gap-3">
-        <button className={boutonSecondaire} disabled={enCours}>
-          Changer le mot de passe
         </button>
         <Retour etat={etat} />
       </div>

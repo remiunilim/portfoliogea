@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
 import { FormAjoutEnseignant, FormAjoutEtudiant, FormImport } from "@/components/admin";
-import { affecterReferent, definirCG2PActifAction, definirConnexionMdpActifAction, definirEnvoiMailsActifAction } from "@/app/actions";
+import { affecterReferent, definirCG2PActifAction, definirEnvoiMailsActifAction } from "@/app/actions";
 import Link from "next/link";
-import { cg2pEstActif, compterCourrielsEnAttente, connexionParMotDePasseActive, envoiMailsActif, listerComptesDesactives, listerEnseignants, listerEtudiants } from "@/lib/db";
+import { cg2pEstActif, compterCourrielsEnAttente, envoiMailsActif, listerComptesDesactives, listerEnseignants, listerEtudiants } from "@/lib/db";
 import { estAdmin, utilisateurCourant } from "@/lib/session";
 import { ANNEES } from "@/lib/referentiel";
 import { PARCOURS_GEA } from "@/lib/import-etudiants";
-import { oidcConfigure } from "@/lib/oidc";
 
 // Gestion des étudiants (import, ajout) et des affectations aux référents (réservé à l'administrateur).
 export default async function Affectations() {
@@ -23,8 +22,6 @@ export default async function Affectations() {
   const cg2pActif = await cg2pEstActif();
   const parcoursDisponibles = cg2pActif ? PARCOURS_GEA : PARCOURS_GEA.filter((p) => p !== "CG2P");
   const mailsActifs = await envoiMailsActif();
-  const mdpActif = await connexionParMotDePasseActive();
-  const ssoConfigure = oidcConfigure();
 
   return (
     <>
@@ -67,28 +64,6 @@ export default async function Affectations() {
           </button>
         </form>
 
-        {!ssoConfigure && (
-          <form
-            action={definirConnexionMdpActifAction}
-            className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
-          >
-            <input type="hidden" name="actif" value={mdpActif ? "0" : "1"} />
-            <span>
-              Connexion par mot de passe (transitoire, avant le SSO) :{" "}
-              {mdpActif ? (
-                <span className="font-medium text-emerald-700">
-                  activée — chaque compte doit avoir un mot de passe (fiche du compte)
-                </span>
-              ) : (
-                <span className="text-muted">désactivée, la page de connexion reste en mode démonstration</span>
-              )}
-            </span>
-            <button className="ml-auto rounded-md border border-line px-3 py-1.5 hover:bg-primary-soft">
-              {mdpActif ? "Désactiver" : "Activer"}
-            </button>
-          </form>
-        )}
-
         <form
           action={definirCG2PActifAction}
           className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm"
@@ -111,7 +86,7 @@ export default async function Affectations() {
           <h2 className="mb-1 text-base font-semibold">Importer une liste d&apos;étudiants</h2>
           <p className="mb-4 text-sm text-muted">
             Colonnes attendues : <strong>Nom, Prénom, Email étudiant, Année, Parcours, Enseignant référent, Email enseignant</strong>{" "}
-            (Groupe facultatif). Les adresses servent aux notifications. Les étudiants déjà présents sont mis à jour, les autres sont
+            (Groupe facultatif). Les adresses servent à la connexion (lien envoyé par mail) et aux notifications. Les étudiants déjà présents sont mis à jour, les autres sont
             créés ; un aperçu s&apos;affiche avant toute modification.
           </p>
           <FormImport />

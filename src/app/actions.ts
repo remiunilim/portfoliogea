@@ -9,9 +9,7 @@ import {
   changerActivation,
   creerUtilisateur,
   definirCG2PActif,
-  definirConnexionParMotDePasseActive,
   definirEnvoiMailsActif,
-  definirMotDePasseHache,
   definirPreferenceCourriel,
   definirReferent,
   emailExiste,
@@ -34,7 +32,6 @@ import {
   getTrace,
   getTraces,
   getUtilisateur,
-  getUtilisateurParEmail,
   journaliser,
   marquerConsulte,
   marquerNotificationsLues,
@@ -44,7 +41,7 @@ import {
   supprimerTrace,
 } from "@/lib/db";
 import { analyserImport, appliquerImport, lireFichier, PARCOURS_GEA, type LigneApercu } from "@/lib/import-etudiants";
-import { hacherMotDePasse, verifierMotDePasse } from "@/lib/mdp";
+import { envoyerLienConnexion } from "@/lib/lien-connexion";
 import { COOKIE_SESSION, estAdmin, estEnseignant, peutModifier, suitEtudiant, utilisateurCourant } from "@/lib/session";
 import {
   competenceParCode,
@@ -64,66 +61,25 @@ export type EtatFormulaire = { ok: boolean; message: string } | null;
 const texte = (f: FormData, cle: string) => String(f.get(cle) ?? "").trim();
 const nbMots = (t: string) => (t ? t.split(/\s+/).length : 0);
 
-// ---------- Session simulée ----------
-
-export async function seConnecter(formData: FormData) {
-  const id = texte(formData, "utilisateur");
-  const u = await getUtilisateur(id);
-  if (!u || !u.actif) return;
-  (await cookies()).set(COOKIE_SESSION, u.id, { httpOnly: true, sameSite: "lax", path: "/" });
-  redirect(u.role === "etudiant" ? `/portfolio/${u.id}` : "/enseignant");
-}
+// ---------- Connexion par lien envoyé par mail ----------
 
 export async function seDeconnecter() {
   (await cookies()).delete(COOKIE_SESSION);
   redirect("/connexion");
 }
 
-// ---------- Connexion par mot de passe (transitoire, en attendant le SSO) ----------
-
-export async function seConnecterAvecMotDePasse(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
+// Démarre une connexion : envoie un lien à usage unique si l'adresse correspond à un compte actif.
+// Message de confirmation volontairement identique dans tous les cas, pour ne pas révéler quelles
+// adresses sont enregistrées (voir src/lib/lien-connexion.ts).
+export async function demarrerConnexionEmailAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   const email = texte(formData, "email");
-  const motDePasse = texte(formData, "mot_de_passe");
-  if (!email || !motDePasse) return { ok: false, message: "Adresse mail et mot de passe obligatoires." };
-  const u = await getUtilisateurParEmail(email);
-  // Message volontairement identique que l'adresse existe ou non, pour ne pas la révéler.
-  const echec = { ok: false, message: "Adresse mail ou mot de passe incorrect." } as const;
-  if (!u || !u.actif) return echec;
-  if (!(await verifierMotDePasse(motDePasse, u.mot_de_passe_hash))) return echec;
-  (await cookies()).set(COOKIE_SESSION, u.id, { httpOnly: true, sameSite: "lax", path: "/" });
-  redirect(u.role === "etudiant" ? `/portfolio/${u.id}` : "/enseignant");
-}
-
-// Définit (ou réinitialise) le mot de passe d'un compte : réservé à l'administrateur, à
-// communiquer ensuite à la personne par un autre moyen (aucun courriel envoyé automatiquement).
-export async function definirMotDePasseAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
-  const admin = await exigerAdmin();
-  if (!admin) return { ok: false, message: "Réservé à l'administrateur." };
-  const compte = await getUtilisateur(texte(formData, "id"));
-  if (!compte) return { ok: false, message: "Compte introuvable." };
-  const motDePasse = texte(formData, "mot_de_passe");
-  if (motDePasse.length < 8) return { ok: false, message: "Le mot de passe doit faire au moins 8 caractères." };
-  await definirMotDePasseHache(compte.id, await hacherMotDePasse(motDePasse));
-  return { ok: true, message: `Mot de passe défini pour ${compte.prenom} ${compte.nom} : communiquez-le lui directement.` };
-}
-
-// Changement de son propre mot de passe (il faut déjà le connaître).
-export async function changerMotDePasseAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
-  const u = await utilisateurCourant();
-  if (!u) return { ok: false, message: "Session expirée." };
-  const actuel = texte(formData, "mot_de_passe_actuel");
-  const nouveau = texte(formData, "nouveau_mot_de_passe");
-  if (!(await verifierMotDePasse(actuel, u.mot_de_passe_hash))) return { ok: false, message: "Mot de passe actuel incorrect." };
-  if (nouveau.length < 8) return { ok: false, message: "Le nouveau mot de passe doit faire au moins 8 caractères." };
-  await definirMotDePasseHache(u.id, await hacherMotDePasse(nouveau));
-  return { ok: true, message: "Mot de passe modifié." };
-}
-
-export async function definirConnexionMdpActifAction(formData: FormData) {
-  const u = await utilisateurCourant();
-  if (!estAdmin(u)) return;
-  await definirConnexionParMotDePasseActive(formData.get("actif") === "1");
-  refresh();
+  if (!email) return { ok: false, message: "Adresse mail obligatoire." };
+  await envoyerLienConnexion(email);
+  return {
+    ok: true,
+    message:
+      "Si cette adresse est enregistrée dans Folio GEA, un lien de connexion vient de lui être envoyé (pensez à vérifier aussi les courriels indésirables).",
+  };
 }
 
 // ---------- Contrôles communs ----------

@@ -24,11 +24,6 @@ export type Utilisateur = {
   actif: number;
   // Notifications par courriel : « immediat », « quotidien » (enseignants) ou « aucun ».
   pref_courriel: PreferenceCourriel;
-  // Identifiant stable transmis par le fournisseur OpenID Connect de l'université (rempli au premier
-  // vrai login SSO, en liant le compte existant repéré par email) ; absent en mode démonstration.
-  identifiant_oidc: string | null;
-  // Haché (jamais le mot de passe en clair) : connexion transitoire en attendant le SSO.
-  mot_de_passe_hash: string | null;
 };
 
 export type PreferenceCourriel = "immediat" | "quotidien" | "aucun";
@@ -148,8 +143,7 @@ async function creerSchema(pool: Pool) {
       referent_id VARCHAR(64) REFERENCES utilisateurs(id),
       actif TINYINT NOT NULL DEFAULT 1,
       pref_courriel VARCHAR(20) NOT NULL DEFAULT 'immediat',
-      parcours VARCHAR(20),
-      identifiant_oidc VARCHAR(255) UNIQUE
+      parcours VARCHAR(20)
     ) ENGINE=InnoDB`,
     `CREATE TABLE IF NOT EXISTS presentations (
       etudiant_id VARCHAR(64) PRIMARY KEY REFERENCES utilisateurs(id),
@@ -253,12 +247,20 @@ async function creerSchema(pool: Pool) {
       cle VARCHAR(50) PRIMARY KEY,
       valeur VARCHAR(255) NOT NULL
     ) ENGINE=InnoDB`,
+    // Connexion par lien envoyé par mail : un jeton à usage unique, valable 20 minutes, par
+    // demande de connexion. Seul le hachage est stocké (le lien envoyé contient le jeton en clair).
+    `CREATE TABLE IF NOT EXISTS jetons_connexion (
+      jeton_hache VARCHAR(64) PRIMARY KEY,
+      utilisateur_id VARCHAR(64) NOT NULL REFERENCES utilisateurs(id),
+      cree_le VARCHAR(32) NOT NULL,
+      expire_le VARCHAR(32) NOT NULL,
+      utilise_le VARCHAR(32),
+      INDEX jetons_utilisateur (utilisateur_id, cree_le)
+    ) ENGINE=InnoDB`,
   ];
   for (const sql of tables) await pool.query(sql);
   // Colonnes ajoutées après la création initiale de la table (sans effet si déjà présentes :
   // MariaDB ignore silencieusement un ADD COLUMN IF NOT EXISTS déjà satisfait).
-  await pool.query("ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS identifiant_oidc VARCHAR(255) UNIQUE");
-  await pool.query("ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mot_de_passe_hash VARCHAR(255)");
   await pool.query("ALTER TABLE courriels ADD COLUMN IF NOT EXISTS envoye_le VARCHAR(32)");
 }
 
@@ -276,30 +278,10 @@ export async function getUtilisateur(id: string): Promise<Utilisateur | undefine
   return (lignes as Utilisateur[])[0];
 }
 
-// Connexion OpenID Connect : retrouve le compte déjà lié (connexions suivantes), sinon le compte
-// existant (créé par l'administrateur, import ou ajout manuel) reconnu par son adresse mail.
-export async function getUtilisateurParOidc(identifiantOidc: string): Promise<Utilisateur | undefined> {
-  const pool = await obtenirPool();
-  const [lignes] = await pool.query("SELECT * FROM utilisateurs WHERE identifiant_oidc = ?", [identifiantOidc]);
-  return (lignes as Utilisateur[])[0];
-}
-
 export async function getUtilisateurParEmail(email: string): Promise<Utilisateur | undefined> {
   const pool = await obtenirPool();
   const [lignes] = await pool.query("SELECT * FROM utilisateurs WHERE LOWER(email) = LOWER(?)", [email]);
   return (lignes as Utilisateur[])[0];
-}
-
-export async function lierIdentifiantOidc(id: string, identifiantOidc: string) {
-  const pool = await obtenirPool();
-  await pool.query("UPDATE utilisateurs SET identifiant_oidc = ? WHERE id = ?", [identifiantOidc, id]);
-}
-
-// Connexion par mot de passe (transitoire, en attendant le SSO) : le hachage est calculé par
-// l'appelant (voir src/lib/mdp.ts), jamais stocké ni journalisé en clair.
-export async function definirMotDePasseHache(id: string, hachage: string) {
-  const pool = await obtenirPool();
-  await pool.query("UPDATE utilisateurs SET mot_de_passe_hash = ? WHERE id = ?", [hachage, id]);
 }
 
 export async function listerUtilisateurs(): Promise<Utilisateur[]> {
@@ -1019,23 +1001,45 @@ export async function definirEnvoiMailsActif(actif: boolean) {
   );
 }
 
-const CLE_CONNEXION_MDP_ACTIVE = "connexion_mdp_active";
+// ---------- Connexion par lien envoyé par mail ----------
+// Le jeton en clair (32 octets aléatoires) part dans le lien du courriel ; seul son hachage SHA-256
+// est stocké ici, à usage unique et valable 20 minutes (voir src/lib/lien-connexion.ts).
+const DUREE_JETON_MINUTES = 20;
 
-// Tant que ni le SSO (OIDC_* dans .env.local) ni ce réglage ne sont actifs, /connexion reste en
-// mode démonstration (choix d'un compte dans une liste, sans mot de passe) : à n'utiliser qu'avec
-// des comptes fictifs. Active ici, /connexion demande une adresse mail et un mot de passe.
-export async function connexionParMotDePasseActive(): Promise<boolean> {
+export async function creerJetonConnexion(utilisateurId: string, jetonHache: string): Promise<void> {
   const pool = await obtenirPool();
-  const [lignes] = await pool.query("SELECT valeur FROM parametres WHERE cle = ?", [CLE_CONNEXION_MDP_ACTIVE]);
-  return (lignes as { valeur: string }[])[0]?.valeur === "1";
+  // Ménage opportuniste : évite d'accumuler indéfiniment les jetons expirés.
+  await pool.query("DELETE FROM jetons_connexion WHERE expire_le < ?", [maintenant()]);
+  await pool.query("INSERT INTO jetons_connexion (jeton_hache, utilisateur_id, cree_le, expire_le) VALUES (?, ?, ?, ?)", [
+    jetonHache,
+    utilisateurId,
+    maintenant(),
+    new Date(Date.now() + DUREE_JETON_MINUTES * 60000).toISOString(),
+  ]);
 }
 
-export async function definirConnexionParMotDePasseActive(actif: boolean) {
+// Un envoi récent (moins d'une minute) pour ce compte : on ne renvoie pas un second lien tout de
+// suite, pour limiter les abus (spam de la boîte mail de la personne).
+export async function demandeRecente(utilisateurId: string): Promise<boolean> {
   const pool = await obtenirPool();
-  await pool.query(
-    `INSERT INTO parametres (cle, valeur) VALUES (?, ?) ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)`,
-    [CLE_CONNEXION_MDP_ACTIVE, actif ? "1" : "0"],
+  const [lignes] = await pool.query(
+    "SELECT 1 FROM jetons_connexion WHERE utilisateur_id = ? AND cree_le > ? LIMIT 1",
+    [utilisateurId, new Date(Date.now() - 60000).toISOString()],
   );
+  return (lignes as unknown[]).length > 0;
+}
+
+// Valide le jeton (existe, non expiré, non déjà utilisé) et le marque utilisé : à usage unique.
+export async function verifierEtConsommerJeton(jetonHache: string): Promise<Utilisateur | undefined> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    "SELECT * FROM jetons_connexion WHERE jeton_hache = ? AND utilise_le IS NULL AND expire_le > ?",
+    [jetonHache, maintenant()],
+  );
+  const jeton = (lignes as { utilisateur_id: string }[])[0];
+  if (!jeton) return undefined;
+  await pool.query("UPDATE jetons_connexion SET utilise_le = ? WHERE jeton_hache = ?", [maintenant(), jetonHache]);
+  return getUtilisateur(jeton.utilisateur_id);
 }
 
 // ---------- Jeu de démonstration ----------
@@ -1198,7 +1202,7 @@ async function completerDemo(pool: Pool) {
 }
 
 async function peuplerDemo(pool: Pool) {
-  const utilisateurs: Omit<Utilisateur, "referent_id" | "parcours" | "actif" | "pref_courriel" | "identifiant_oidc" | "mot_de_passe_hash">[] = [
+  const utilisateurs: Omit<Utilisateur, "referent_id" | "parcours" | "actif" | "pref_courriel">[] = [
     { id: "ens-martin", prenom: "Claire", nom: "Martin", email: "claire.martin@exemple.fr", role: "admin", annee_but: null, groupe: null },
     { id: "ens-bernard", prenom: "Thomas", nom: "Bernard", email: "thomas.bernard@exemple.fr", role: "enseignant", annee_but: null, groupe: null },
     { id: "etu-dubois", prenom: "Léa", nom: "Dubois", email: "lea.dubois@etu.exemple.fr", role: "etudiant", annee_but: 1, groupe: "TD1" },

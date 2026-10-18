@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { EnTete } from "@/components/EnTete";
-import { FormChangerMotDePasse, FormPreferences } from "@/components/admin";
-import { connexionParMotDePasseActive, envoiMailsActif, getUtilisateur, listerEtudiants } from "@/lib/db";
+import { FormPreferences } from "@/components/admin";
+import { envoiMailsActif, getUtilisateur, listerEtudiants } from "@/lib/db";
 import { estEnseignant, utilisateurCourant } from "@/lib/session";
 
 export default async function MonCompte() {
@@ -12,7 +12,6 @@ export default async function MonCompte() {
   const nbSuivis = enseignant ? (await listerEtudiants({ referentId: u.id })).length : 0;
   const emailProvisoire = u.email.endsWith(".a-renseigner");
   const mailsActifs = await envoiMailsActif();
-  const mdpActif = await connexionParMotDePasseActive();
 
   return (
     <>
@@ -34,7 +33,9 @@ export default async function MonCompte() {
           </p>
           {emailProvisoire && (
             <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Aucune adresse mail n&apos;est encore enregistrée pour vous : aucun courriel ne pourra être envoyé.
+              Aucune adresse mail n&apos;est encore enregistrée pour vous : aucun courriel ne pourra être envoyé, et vous ne
+              pourrez pas vous reconnecter une fois votre session actuelle terminée (la connexion se fait par lien envoyé
+              par mail). Demandez à l&apos;administrateur de la renseigner sur votre fiche de compte.
             </p>
           )}
           {mailsActifs ? (
@@ -47,12 +48,6 @@ export default async function MonCompte() {
           )}
         </section>
 
-        {mdpActif && (
-          <section className="mt-6 rounded-xl border border-line bg-surface p-5">
-            <h2 className="mb-3 text-base font-semibold">Mot de passe</h2>
-            <FormChangerMotDePasse />
-          </section>
-        )}
       </main>
     </>
   );
