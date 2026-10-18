@@ -78,7 +78,8 @@ export async function demarrerConnexionEmailAction(_: EtatFormulaire, formData: 
   return {
     ok: true,
     message:
-      "Si cette adresse est enregistrée dans Folio GEA, un lien de connexion vient de lui être envoyé (pensez à vérifier aussi les courriels indésirables).",
+      "Si cette adresse est enregistrée dans Folio GEA, un lien de connexion vient de lui être envoyé (pensez à vérifier aussi les courriels indésirables). " +
+      "Si vous ne recevez rien d'ici quelques minutes, votre compte n'est peut-être pas encore créé dans Folio GEA : contactez votre enseignant·e référent·e ou l'administrateur.",
   };
 }
 
