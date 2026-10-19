@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { genererPdfDemo } from "./pdf-demo";
+import { lienAbsolu } from "./url-publique";
 
 // Stockage : MariaDB (connexion ci-dessous) pour les données, un dossier local pour les PDF déposés.
 export const DOSSIER_DONNEES = path.join(process.cwd(), "data");
@@ -706,7 +707,7 @@ async function mettreEnFileCourriel(n: Pick<Notification, "destinataire_id" | "t
   const pool = await obtenirPool();
   await pool.query(
     "INSERT INTO courriels (destinataire_id, adresse, sujet, corps, mode, cree_le) VALUES (?, ?, ?, ?, ?, ?)",
-    [d.id, d.email, `[Folio GEA] ${n.titre}`, `${n.detail}\n\nVoir dans Folio GEA : ${n.lien}`, d.pref_courriel, maintenant()],
+    [d.id, d.email, `[Folio GEA] ${n.titre}`, `${n.detail}\n\nVoir dans Folio GEA : ${lienAbsolu(n.lien)}`, d.pref_courriel, maintenant()],
   );
 }
 

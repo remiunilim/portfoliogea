@@ -13,6 +13,7 @@ import {
 } from "./db";
 import { EMAIL_VALIDE } from "./import-etudiants";
 import { echapperHtml, envoyerCourriel, gabaritCourrielHtml } from "./mail";
+import { urlPublique } from "./url-publique";
 
 // Pas de lien affiché en texte brut dans le HTML (seulement le bouton) : certains services d'envoi
 // (ex. Brevo) réécrivent les liens des mails HTML pour mesurer les clics, en les faisant passer par
@@ -40,9 +41,9 @@ const boutonHtml = (lien: string, libelle: string) => `
 const hacher = (jeton: string) => createHash("sha256").update(jeton).digest("hex");
 
 function urlBase(): string {
-  const url = process.env.APP_BASE_URL;
+  const url = urlPublique();
   if (!url) throw new Error("APP_BASE_URL n'est pas renseignée (voir .env.example).");
-  return url.replace(/\/$/, "");
+  return url;
 }
 
 // Domaines autorisés à s'auto-inscrire (ex. "unilim.fr,etu.unilim.fr"), si renseigné dans
