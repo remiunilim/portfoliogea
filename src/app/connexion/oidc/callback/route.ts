@@ -3,22 +3,26 @@ import { cookies } from "next/headers";
 import { COOKIE_OIDC_ETAT, terminerConnexionOidc } from "@/lib/oidc";
 import { COOKIE_SESSION } from "@/lib/session";
 import { getUtilisateurParEmail, getUtilisateurParOidc, lierIdentifiantOidc } from "@/lib/db";
+import { urlPublique } from "@/lib/url-publique";
 
 // Retour du fournisseur d'identité : valide l'échange, retrouve le compte (lié ou reconnu par
 // email) et ouvre la session. Les comptes sont créés par l'administrateur (import ou ajout
 // manuel) : un identifiant OpenID Connect sans compte correspondant n'est pas auto-provisionné.
+// Les redirections partent de l'adresse publique (APP_BASE_URL) et non de l'adresse vue par Next.js,
+// qui peut être http://localhost:3000 derrière Apache.
 export async function GET(requete: Request) {
   const url = new URL(requete.url);
+  const base = urlPublique() ?? url.origin;
   const cookieStore = await cookies();
   const brut = cookieStore.get(COOKIE_OIDC_ETAT)?.value;
-  if (!brut) return NextResponse.redirect(new URL("/connexion?erreur=expire", url));
+  if (!brut) return NextResponse.redirect(new URL("/connexion?erreur=expire", base));
 
   let identite;
   try {
     const etat = JSON.parse(brut);
     identite = await terminerConnexionOidc(url, etat);
   } catch {
-    const reponse = NextResponse.redirect(new URL("/connexion?erreur=echec", url));
+    const reponse = NextResponse.redirect(new URL("/connexion?erreur=echec", base));
     reponse.cookies.delete(COOKIE_OIDC_ETAT);
     return reponse;
   }
@@ -30,13 +34,13 @@ export async function GET(requete: Request) {
   }
 
   if (!compte || !compte.actif) {
-    const reponse = NextResponse.redirect(new URL("/connexion?erreur=inconnu", url));
+    const reponse = NextResponse.redirect(new URL("/connexion?erreur=inconnu", base));
     reponse.cookies.delete(COOKIE_OIDC_ETAT);
     return reponse;
   }
 
   const destination = compte.role === "etudiant" ? `/portfolio/${compte.id}` : "/enseignant";
-  const reponse = NextResponse.redirect(new URL(destination, url));
+  const reponse = NextResponse.redirect(new URL(destination, base));
   reponse.cookies.set(COOKIE_SESSION, compte.id, { httpOnly: true, sameSite: "lax", path: "/" });
   reponse.cookies.delete(COOKIE_OIDC_ETAT);
   return reponse;

@@ -71,6 +71,7 @@ Voir `README.md` (« Organisation du code ») pour le tableau à jour, qui diff�
 | 15/10/2026 | Passage SQLite → MariaDB ; modèles Apache/systemd ; SSO OpenID Connect câblé (en attente des réglages réels de la DSI) |
 | 16–17/10/2026 | CG2P configuré (masqué par défaut) ; envoi réel des courriels (coupe-circuit désactivé par défaut) ; Apache/systemd vérifiés en conditions réelles (WSL) ; connexion par mot de passe transitoire ; page d'archivage/suppression groupés ; projet mis sous Git et sauvegardé sur GitHub (`remiunilim/portfoliogea`) |
 | 18/10/2026 | Export Excel des notes (enseignant et administrateur) ; vérification DSI (rien n'a dérivé) ; **création de la branche `ovh`** (connexion par lien mail, puis auto-inscription étudiante sécurisée par vérification d'email, restreinte à `unilim.fr`) ; nettoyage de la base `main` pour ne garder que le compte administrateur de l'utilisateur (`remi.mougin@unilim.fr`) |
+| 19/10/2026 | Correction « le lien du mail renvoie vers localhost » (signalée sur `ovh`, appliquée aux deux branches) : liens absolus et redirections construits à partir de `APP_BASE_URL` (`src/lib/url-publique.ts`) ; sur `main`, retour SSO reconstruit depuis `OIDC_REDIRECT_URI` |
 
 ## 8. Reste à faire
 

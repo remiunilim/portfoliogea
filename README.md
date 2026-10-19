@@ -94,6 +94,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   par l'administrateur sur sa fiche de compte (aucun courriel n'est envoyé automatiquement : à
   communiquer directement) ; elle peut ensuite le changer elle-même sur *Mon compte*. Ce réglage
   se désactive automatiquement (masqué) une fois le SSO configuré (`OIDC_*` renseignées).
+- **`APP_BASE_URL`** (`.env.local`) : l'adresse publique exacte de l'application (ex. `https://folio-gea.universite.fr`). Elle sert aux liens des courriels de notification et aux redirections après connexion SSO. **Si un lien reçu par mail ouvre `localhost`**, c'est qu'elle a été laissée à sa valeur d'exemple : la corriger, puis `sudo systemctl restart folio-gea`.
 
 **Sur le serveur Linux (Ubuntu)** :
 

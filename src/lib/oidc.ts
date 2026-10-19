@@ -58,7 +58,12 @@ export type IdentiteOidc = { identifiant: string; email: string | undefined };
 // échoue (code expiré, state ou nonce invalide, etc.) : à l'appelant de rediriger proprement.
 export async function terminerConnexionOidc(urlCourante: URL, etat: EtatOidc): Promise<IdentiteOidc> {
   const config = await configuration();
-  const tokens = await client.authorizationCodeGrant(config, urlCourante, {
+  // openid-client renvoie au fournisseur l'adresse de retour déduite de l'URL courante : derrière
+  // Apache, Next.js peut la voir en http://localhost:3000, ce que le fournisseur refuserait. On
+  // repart donc de l'adresse déclarée (OIDC_REDIRECT_URI), avec les paramètres reçus.
+  const urlRetour = new URL(process.env.OIDC_REDIRECT_URI!);
+  urlRetour.search = urlCourante.search;
+  const tokens = await client.authorizationCodeGrant(config, urlRetour, {
     pkceCodeVerifier: etat.codeVerifier,
     expectedState: etat.state,
     expectedNonce: etat.nonce,
