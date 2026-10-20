@@ -46,7 +46,7 @@ Tout le reste (référentiels, dépôts, évaluation, export PDF/Excel, administ
 Voir `README.md` (« Fonctionnalités » et « Connexion et déploiement ») pour le détail à jour. Résumé de ce qui est spécifique à `ovh` :
 
 - **Connexion par lien mail** (`/connexion`) : adresse connue → lien de connexion ; adresse inconnue → lien de **création de profil** (`/connexion/creer-profil`), qui ne fait que prouver la possession de l'adresse — le compte n'existe qu'après soumission du formulaire. Message de confirmation toujours identique (ne révèle jamais si une adresse existe déjà).
-- **Auto-inscription étudiante** : Nom, Prénom, Année, Parcours (à partir de BUT2) et enseignant·e référent·e, tous obligatoires ; réservée aux étudiant·e·s (un·e enseignant·e reste ajouté·e par l'administrateur) ; restreinte par domaine via `EMAIL_ETUDIANTS_DOMAINES` (réglé sur `unilim.fr` par défaut dans `.env.example`) ; le référent choisi reçoit une notification.
+- **Auto-inscription étudiante** : Nom, Prénom, Année, Parcours (à partir de BUT2) et enseignant·e référent·e, tous obligatoires ; réservée aux étudiant·e·s (un·e enseignant·e reste ajouté·e par l'administrateur) ; restreinte par domaine via `EMAIL_ETUDIANTS_DOMAINES` (réglé sur `unilim.fr,etu.unilim.fr` par défaut dans `.env.example`, les adresses étudiantes étant en `@etu.unilim.fr`) ; le référent choisi reçoit une notification.
 - Reste identique à `main` : référentiels des 4 parcours, évaluation en deux temps, rendez-vous de suivi, administration (import, ajout, fiches, passage d'année, archivage/suppression groupés), notifications, export PDF, **export Excel des notes**, journal, thème clair/sombre.
 
 ## 6. Organisation du code
