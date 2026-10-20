@@ -1,6 +1,7 @@
 # Envoie les courriels en attente en mode "immédiat" (un courriel par dépôt, dès que possible),
 # en appelant l'application elle-même. Déclenché par deploy/folio-gea-courriels.timer.
-# CRON_SECRET doit correspondre à .env.local. À adapter (domaine, secret) puis copier dans
+# Appel direct à 127.0.0.1 (sans passer par Apache) : le secret n'apparaît pas dans les journaux
+# d'Apache. CRON_SECRET doit correspondre à .env.local. À adapter (secret) puis copier dans
 # /etc/systemd/system/.
 
 [Unit]
@@ -9,4 +10,4 @@ After=folio-gea.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/curl -fsS "https://folio-gea.universite.fr/api/cron/courriels?secret=CHANGEZ_MOI&mode=immediat"
+ExecStart=/usr/bin/curl -fsS "http://127.0.0.1:3000/api/cron/courriels?secret=CHANGEZ_MOI&mode=immediat"

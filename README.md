@@ -24,6 +24,11 @@ Au premier démarrage **en local** (`npm run dev`, mode démonstration), l'appli
 
 **Mode démonstration** (comptes fictifs, connexion en choisissant un compte sans mot de passe) : actif d'office en local, **jamais en production** sauf `MODE_DEMO=1` dans `.env.local`. Sur un serveur, une base neuve reste donc vide : renseigner `ADMIN_EMAIL` (votre adresse) pour que le premier compte administrateur soit créé au démarrage, puis importer les étudiants et enseignants.
 
+**Autres protections** :
+- Limite des tentatives : connexion par mot de passe (10 échecs par compte ou 50 par adresse IP, blocage de 15 minutes) et demandes de lien de connexion (30 par adresse IP en 10 minutes, 200 par heure pour tout le site) ; seuils larges, car une salle de TD entière partage souvent la même adresse IP (`src/lib/limite.ts`).
+- En-têtes de sécurité (`next.config.ts`) : le site ne peut pas être affiché dans un cadre d'un autre site, les adresses complètes (qui peuvent contenir un jeton) ne sont jamais transmises à un autre site, et le type des fichiers est imposé.
+- Sur le serveur, Next.js n'écoute que `127.0.0.1` (`-H 127.0.0.1` dans `deploy/folio-gea.service`) : on ne peut le joindre qu'à travers Apache et HTTPS. Les minuteurs d'envoi des courriels appellent directement `http://127.0.0.1:3000`, pour que leur secret n'apparaisse pas dans les journaux d'Apache. Apache impose le HTTPS au navigateur (`Strict-Transport-Security`). **Ces fichiers sont copiés dans `/etc` à l'installation : `deploy/mettre-a-jour.sh` ne les met pas à jour, il faut reporter les changements à la main.**
+
 ## Fonctionnalités
 
 - **Étudiant** : un onglet *Présentation*, puis un onglet par compétence de l'année. Chaque onglet contient un argumentaire saisi dans l'outil et de 1 à 3 traces PDF de 10 Mo maximum. Les traces peuvent être renommées, remplacées ou supprimées à tout moment, car il n'y a pas de période de dépôt. Les années précédentes (BUT1, BUT2) restent accessibles et peuvent être complétées.

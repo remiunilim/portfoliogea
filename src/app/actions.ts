@@ -48,6 +48,7 @@ import {
   supprimerTrace,
 } from "@/lib/db";
 import { analyserImport, appliquerImport, lireFichier, PARCOURS_GEA, type LigneApercu } from "@/lib/import-etudiants";
+import { adresseClient, compterTentative, oublierTentatives, tentativesEpuisees } from "@/lib/limite";
 import { hacherMotDePasse, verifierMotDePasse } from "@/lib/mdp";
 import { appliquerImportZip } from "@/lib/transfert";
 import { oidcConfigure } from "@/lib/oidc";
@@ -100,8 +101,20 @@ export async function seConnecterAvecMotDePasse(_: EtatFormulaire, formData: For
   const echec = { ok: false, message: "Adresse mail ou mot de passe incorrect." } as const;
   // Comme pour seConnecter : refusé si ce mode n'est pas (ou plus) celui de la page de connexion.
   if (oidcConfigure() || !(await connexionParMotDePasseActive())) return echec;
-  if (!u || !u.actif) return echec;
-  if (!(await verifierMotDePasse(motDePasse, u.mot_de_passe_hash))) return echec;
+
+  // Contre les essais de mots de passe à la chaîne : 10 échecs par compte, ou 50 depuis une même
+  // adresse IP (toute une salle de TD peut partager la même), bloquent 15 minutes.
+  const cleCompte = `mdp-compte:${email.toLowerCase()}`;
+  const cleIp = `mdp-ip:${await adresseClient()}`;
+  if (tentativesEpuisees(cleCompte, 10) || tentativesEpuisees(cleIp, 50)) {
+    return { ok: false, message: "Trop de tentatives. Réessayez dans 15 minutes." };
+  }
+  if (!u || !u.actif || !(await verifierMotDePasse(motDePasse, u.mot_de_passe_hash))) {
+    compterTentative(cleCompte, 15 * 60 * 1000);
+    compterTentative(cleIp, 15 * 60 * 1000);
+    return echec;
+  }
+  oublierTentatives(cleCompte);
   await ouvrirSession(u.id);
   redirect(u.role === "etudiant" ? `/portfolio/${u.id}` : "/enseignant");
 }
