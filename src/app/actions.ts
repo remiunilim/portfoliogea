@@ -45,6 +45,7 @@ import {
 import { analyserImport, appliquerImport, lireFichier, PARCOURS_GEA, type LigneApercu } from "@/lib/import-etudiants";
 import { consommerJetonInscription, emailDuJetonInscription, envoyerLienConnexion } from "@/lib/lien-connexion";
 import { appliquerImportZip } from "@/lib/transfert";
+import { adresseClient, compterTentative, tentativesEpuisees } from "@/lib/limite";
 import { estAdmin, estEnseignant, fermerSession, ouvrirSession, peutModifier, suitEtudiant, utilisateurCourant } from "@/lib/session";
 import {
   competenceParCode,
@@ -78,6 +79,17 @@ export async function seDeconnecter() {
 export async function demarrerConnexionEmailAction(_: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   const email = texte(formData, "email");
   if (!email) return { ok: false, message: "Adresse mail obligatoire." };
+
+  // Contre les robots qui feraient envoyer des courriels en masse (spam, quota du service d'envoi
+  // épuisé) : 30 demandes par 10 minutes depuis une même adresse IP (une salle de TD entière peut
+  // la partager), et 200 par heure pour tout le site. Une même adresse mail reste en plus limitée
+  // à un envoi par minute (voir src/lib/lien-connexion.ts).
+  const cleIp = `lien-ip:${await adresseClient()}`;
+  if (tentativesEpuisees(cleIp, 30) || tentativesEpuisees("lien-global", 200)) {
+    return { ok: false, message: "Trop de demandes pour le moment. Réessayez dans quelques minutes." };
+  }
+  compterTentative(cleIp, 10 * 60 * 1000);
+  compterTentative("lien-global", 60 * 60 * 1000);
   await envoyerLienConnexion(email);
   return {
     ok: true,

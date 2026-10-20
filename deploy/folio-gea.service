@@ -33,7 +33,9 @@ Group=folio-gea
 WorkingDirectory=/srv/folio-gea
 EnvironmentFile=/srv/folio-gea/.env.local
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 3000
+# -H 127.0.0.1 : n'écoute que les connexions venant du serveur lui-même (Apache). Sans lui, le
+# port 3000 serait ouvert à tous, sans HTTPS, en contournant Apache.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
 Restart=on-failure
 RestartSec=5
 # Dossier des PDF déposés et de la base de données locale (si conservé) :
