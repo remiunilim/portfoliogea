@@ -1,11 +1,11 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import {
   ajouterTrace,
   appliquerChangementsGroupes,
+  connexionParMotDePasseActive,
   changerActivation,
   creerUtilisateur,
   definirCG2PActif,
@@ -39,6 +39,7 @@ import {
   journaliser,
   marquerConsulte,
   marquerNotificationsLues,
+  modeDemo,
   modifierTrace,
   notifier,
   publierDepot,
@@ -49,7 +50,8 @@ import {
 import { analyserImport, appliquerImport, lireFichier, PARCOURS_GEA, type LigneApercu } from "@/lib/import-etudiants";
 import { hacherMotDePasse, verifierMotDePasse } from "@/lib/mdp";
 import { appliquerImportZip } from "@/lib/transfert";
-import { COOKIE_SESSION, estAdmin, estEnseignant, peutModifier, suitEtudiant, utilisateurCourant } from "@/lib/session";
+import { oidcConfigure } from "@/lib/oidc";
+import { estAdmin, estEnseignant, fermerSession, ouvrirSession, peutModifier, suitEtudiant, utilisateurCourant } from "@/lib/session";
 import {
   competenceParCode,
   estAnneeBUT,
@@ -68,18 +70,22 @@ export type EtatFormulaire = { ok: boolean; message: string } | null;
 const texte = (f: FormData, cle: string) => String(f.get(cle) ?? "").trim();
 const nbMots = (t: string) => (t ? t.split(/\s+/).length : 0);
 
-// ---------- Session simulée ----------
+// ---------- Connexion de démonstration (choix d'un compte, sans mot de passe) ----------
 
+// Refusée hors mode démonstration, et dès qu'une vraie connexion (SSO ou mot de passe) est en
+// place : la page /connexion ne l'affiche alors plus, mais une Server Action reste appelable
+// directement, d'où ce contrôle côté serveur.
 export async function seConnecter(formData: FormData) {
+  if (!modeDemo() || oidcConfigure() || (await connexionParMotDePasseActive())) return;
   const id = texte(formData, "utilisateur");
   const u = await getUtilisateur(id);
   if (!u || !u.actif) return;
-  (await cookies()).set(COOKIE_SESSION, u.id, { httpOnly: true, sameSite: "lax", path: "/" });
+  await ouvrirSession(u.id);
   redirect(u.role === "etudiant" ? `/portfolio/${u.id}` : "/enseignant");
 }
 
 export async function seDeconnecter() {
-  (await cookies()).delete(COOKIE_SESSION);
+  await fermerSession();
   redirect("/connexion");
 }
 
@@ -92,9 +98,11 @@ export async function seConnecterAvecMotDePasse(_: EtatFormulaire, formData: For
   const u = await getUtilisateurParEmail(email);
   // Message volontairement identique que l'adresse existe ou non, pour ne pas la révéler.
   const echec = { ok: false, message: "Adresse mail ou mot de passe incorrect." } as const;
+  // Comme pour seConnecter : refusé si ce mode n'est pas (ou plus) celui de la page de connexion.
+  if (oidcConfigure() || !(await connexionParMotDePasseActive())) return echec;
   if (!u || !u.actif) return echec;
   if (!(await verifierMotDePasse(motDePasse, u.mot_de_passe_hash))) return echec;
-  (await cookies()).set(COOKIE_SESSION, u.id, { httpOnly: true, sameSite: "lax", path: "/" });
+  await ouvrirSession(u.id);
   redirect(u.role === "etudiant" ? `/portfolio/${u.id}` : "/enseignant");
 }
 

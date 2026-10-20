@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { COOKIE_OIDC_ETAT, terminerConnexionOidc } from "@/lib/oidc";
-import { COOKIE_SESSION } from "@/lib/session";
+import { COOKIE_SESSION, creerSession, optionsCookieSession } from "@/lib/session";
 import { getUtilisateurParEmail, getUtilisateurParOidc, lierIdentifiantOidc } from "@/lib/db";
 import { urlPublique } from "@/lib/url-publique";
 
@@ -41,7 +41,7 @@ export async function GET(requete: Request) {
 
   const destination = compte.role === "etudiant" ? `/portfolio/${compte.id}` : "/enseignant";
   const reponse = NextResponse.redirect(new URL(destination, base));
-  reponse.cookies.set(COOKIE_SESSION, compte.id, { httpOnly: true, sameSite: "lax", path: "/" });
+  reponse.cookies.set(COOKIE_SESSION, await creerSession(compte.id), optionsCookieSession());
   reponse.cookies.delete(COOKIE_OIDC_ETAT);
   return reponse;
 }

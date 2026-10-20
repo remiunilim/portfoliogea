@@ -18,7 +18,11 @@ npm run dev
 
 Ouvrir ensuite http://localhost:3000.
 
-Au premier démarrage, l'application crée les tables puis les remplit avec un jeu de démonstration de 3 enseignants (dont une administratrice) et 12 étudiants répartis en BUT1, BUT2 et BUT3, dont 2 en GPRH (Sarah Benali, Maxime Laurent) et 2 en GC2F (Julie Perrin, Antoine Masson). Les PDF déposés restent stockés localement dans le dossier `data/fichiers/`. Pour repartir de zéro, vider la base (`DROP DATABASE` puis relancer) et supprimer le dossier `data/`.
+Au premier démarrage **en local** (`npm run dev`, mode démonstration), l'application crée les tables puis les remplit avec un jeu de démonstration de 3 enseignants (dont une administratrice) et 12 étudiants répartis en BUT1, BUT2 et BUT3, dont 2 en GPRH (Sarah Benali, Maxime Laurent) et 2 en GC2F (Julie Perrin, Antoine Masson). Les PDF déposés restent stockés localement dans le dossier `data/fichiers/`. Pour repartir de zéro, vider la base (`DROP DATABASE` puis relancer) et supprimer le dossier `data/`.
+
+**Sécurité des connexions** : une fois connecté·e, le navigateur ne garde qu'un jeton de session aléatoire (cookie `folio_session`), jamais l'identifiant du compte ; la base n'en conserve que l'empreinte (table `sessions`, valable 7 jours). Se déconnecter, supprimer ou désactiver le compte le rend aussitôt inutilisable. Le cookie est réservé au HTTPS dès que `APP_BASE_URL` commence par `https://`.
+
+**Mode démonstration** (comptes fictifs, connexion en choisissant un compte sans mot de passe) : actif d'office en local, **jamais en production** sauf `MODE_DEMO=1` dans `.env.local`. Sur un serveur, une base neuve reste donc vide : renseigner `ADMIN_EMAIL` (votre adresse) pour que le premier compte administrateur soit créé au démarrage, puis importer les étudiants et enseignants.
 
 ## Fonctionnalités
 
@@ -84,7 +88,7 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   - `deploy/folio-gea.service` : service systemd (lance `next start`) — bien suivre l'ordre des commandes dans ses commentaires : le dossier `data/` doit exister (avec les bons droits) **avant** le premier démarrage, sinon le service échoue (erreur systemd 226/NAMESPACE)
   - `deploy/folio-gea-courriels.service`/`.timer` et `deploy/folio-gea-courriels-quotidien.service`/`.timer` : vidage périodique de la file de courriels
   - `deploy/mettre-a-jour.sh` : met à jour vers la dernière version poussée sur GitHub (`sudo deploy/mettre-a-jour.sh`, depuis le serveur) — voir « Mettre à jour une installation existante » plus bas
-- **Connexion SSO OpenID Connect** : faite (`src/lib/oidc.ts`, routes `src/app/connexion/oidc`), mais **pas encore testée avec le vrai fournisseur de la DSI** — en attente de ses réglages. Tant que `OIDC_ISSUER` (et les autres variables `OIDC_*` de `.env.example`) ne sont pas renseignées, `/connexion` reste en mode démonstration (choix d'un compte fictif) ; dès qu'elles le sont, elle affiche un seul bouton « Se connecter avec le compte de l'université ». Au premier vrai login, le compte est reconnu par son **email** (celui déjà enregistré via l'import Excel ou l'ajout manuel) puis l'identifiant OpenID Connect y est lié pour les connexions suivantes. **Aucun compte n'est créé automatiquement** : un compte universitaire inconnu de Folio GEA affiche un message invitant à contacter l'administrateur (l'étudiant·e ou l'enseignant·e doit déjà avoir été importé·e ou ajouté·e). À demander à la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, et l'URL de retour à déclarer chez eux (`OIDC_REDIRECT_URI`, doit correspondre exactement à ce qui est configuré côté DSI).
+- **Connexion SSO OpenID Connect** : faite (`src/lib/oidc.ts`, routes `src/app/connexion/oidc`), mais **pas encore testée avec le vrai fournisseur de la DSI** — en attente de ses réglages. Tant que `OIDC_ISSUER` (et les autres variables `OIDC_*` de `.env.example`) ne sont pas renseignées, `/connexion` affiche la connexion par mot de passe si elle est activée, la liste des comptes fictifs en mode démonstration (local), et sinon un simple message « connexion pas encore ouverte » ; dès qu'elles le sont, elle affiche un seul bouton « Se connecter avec le compte de l'université ». Au premier vrai login, le compte est reconnu par son **email** (lu dans le jeton d'identité, ou à défaut dans le profil *userinfo* du fournisseur) (celui déjà enregistré via l'import Excel ou l'ajout manuel) puis l'identifiant OpenID Connect y est lié pour les connexions suivantes. **Aucun compte n'est créé automatiquement** : un compte universitaire inconnu de Folio GEA affiche un message invitant à contacter l'administrateur (l'étudiant·e ou l'enseignant·e doit déjà avoir été importé·e ou ajouté·e). À demander à la DSI : l'adresse du fournisseur (issuer), un identifiant et une clé secrète d'application, et l'URL de retour à déclarer chez eux (`OIDC_REDIRECT_URI`, doit correspondre exactement à ce qui est configuré côté DSI).
 - **Connexion par mot de passe (transitoire)** : pour un déploiement avec de vrais comptes
   **avant** que le SSO ne soit branché, sans attendre la DSI. Tant que `/connexion` affichait la
   liste des comptes à choisir (mode démonstration), n'importe qui pouvait se connecter à la
@@ -93,7 +97,11 @@ Au premier démarrage, l'application crée les tables puis les remplit avec un j
   par un vrai formulaire email + mot de passe. Chaque personne a besoin d'un mot de passe défini
   par l'administrateur sur sa fiche de compte (aucun courriel n'est envoyé automatiquement : à
   communiquer directement) ; elle peut ensuite le changer elle-même sur *Mon compte*. Ce réglage
-  se désactive automatiquement (masqué) une fois le SSO configuré (`OIDC_*` renseignées).
+  se désactive automatiquement (masqué) une fois le SSO configuré (`OIDC_*` renseignées), et la
+  connexion par mot de passe est alors refusée côté serveur. Pour l'activer sur une installation
+  neuve, il faut d'abord pouvoir entrer comme administrateur : démarrer le temps de ce réglage avec
+  `MODE_DEMO=1` (et `ADMIN_EMAIL`), activer le mot de passe et définir le sien, puis retirer
+  `MODE_DEMO` et redémarrer.
 - **`APP_BASE_URL`** (`.env.local`) : l'adresse publique exacte de l'application (ex. `https://folio-gea.universite.fr`). Elle sert aux liens des courriels de notification et aux redirections après connexion SSO. **Si un lien reçu par mail ouvre `localhost`**, c'est qu'elle a été laissée à sa valeur d'exemple : la corriger, puis `sudo systemctl restart folio-gea`.
 
 **Sur le serveur Linux (Ubuntu)** :

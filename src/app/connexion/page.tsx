@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { BoutonTheme } from "@/components/BoutonTheme";
 import { FormConnexionMotDePasse } from "@/components/connexion";
 import { COOKIE_THEME, lireTheme } from "@/lib/theme";
-import { connexionParMotDePasseActive, listerUtilisateurs } from "@/lib/db";
+import { connexionParMotDePasseActive, listerUtilisateurs, modeDemo } from "@/lib/db";
 import { oidcConfigure } from "@/lib/oidc";
 
 const MESSAGES_ERREUR: Record<string, string> = {
@@ -63,6 +63,29 @@ export default async function Connexion(props: PageProps<"/connexion">) {
           reçu : contactez l&apos;administrateur.
         </p>
         <FormConnexionMotDePasse />
+      </main>
+    );
+  }
+
+  // Aucune connexion réelle configurée et pas en mode démonstration (serveur de production) :
+  // on n'affiche surtout pas la liste des comptes, qui permettrait d'entrer sans mot de passe.
+  if (!modeDemo()) {
+    return (
+      <main className="mx-auto w-full max-w-md px-4 py-24 sm:px-6">
+        <div className="mb-8 flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-lg bg-primary text-lg font-bold text-white">F</span>
+          <div>
+            <h1 className="text-2xl font-semibold">Folio GEA</h1>
+            <p className="text-sm text-muted">Portfolio de compétences du BUT GEA</p>
+          </div>
+          <div className="ml-auto">
+            <BoutonTheme initial={theme} />
+          </div>
+        </div>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          La connexion n&apos;est pas encore ouverte. Elle se fera avec les identifiants de l&apos;université dès que
+          le service sera configuré. En attendant, contactez l&apos;administrateur de Folio GEA.
+        </p>
       </main>
     );
   }

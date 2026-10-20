@@ -70,8 +70,17 @@ export async function terminerConnexionOidc(urlCourante: URL, etat: EtatOidc): P
   });
   const claims = tokens.claims();
   if (!claims) throw new Error("Le fournisseur n'a renvoyé aucune information sur l'utilisateur.");
-  return {
-    identifiant: String(claims.sub),
-    email: typeof claims.email === "string" ? claims.email : undefined,
-  };
+  let email = typeof claims.email === "string" ? claims.email : undefined;
+  // Certains fournisseurs ne mettent pas l'adresse mail dans le jeton d'identité, seulement dans
+  // les informations de profil (userinfo) : on la demande alors, sinon le compte ne serait pas
+  // reconnu à la première connexion.
+  if (!email && tokens.access_token) {
+    try {
+      const infos = await client.fetchUserInfo(config, tokens.access_token, claims.sub);
+      if (typeof infos.email === "string") email = infos.email;
+    } catch (e) {
+      console.error("OpenID Connect : lecture du profil (userinfo) impossible :", e);
+    }
+  }
+  return { identifiant: String(claims.sub), email };
 }
