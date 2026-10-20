@@ -115,8 +115,12 @@ async function creerPool(): Promise<Pool> {
   });
 
   await creerSchema(pool);
+  // Avant le jeu de démonstration : une base neuve avec ADMIN_EMAIL n'a donc jamais de comptes fictifs.
+  await creerAdministrateurInitial(pool);
   const [[{ n }]] = (await pool.query("SELECT COUNT(*) AS n FROM utilisateurs")) as [{ n: number }[], unknown];
-  if (n === 0) await peuplerDemo(pool);
+  // Jeu de démonstration (comptes fictifs) : seulement sur une base vide ET en mode démonstration,
+  // jamais par défaut sur un serveur de production (voir modeDemo).
+  if (n === 0 && modeDemo()) await peuplerDemo(pool);
   await completerDemo(pool);
   await completerDemoRendezVous(pool);
   await completerDemoParcours(pool);
@@ -268,6 +272,15 @@ async function creerSchema(pool: Pool) {
       cle VARCHAR(50) PRIMARY KEY,
       valeur VARCHAR(255) NOT NULL
     ) ENGINE=InnoDB`,
+    // Sessions ouvertes : le navigateur ne garde qu'un jeton aléatoire, dont seule l'empreinte
+    // (SHA-256) est stockée ici. Voir src/lib/session.ts.
+    `CREATE TABLE IF NOT EXISTS sessions (
+      jeton_hash CHAR(64) PRIMARY KEY,
+      utilisateur_id VARCHAR(64) NOT NULL,
+      cree_le VARCHAR(32) NOT NULL,
+      expire_le VARCHAR(32) NOT NULL,
+      INDEX (utilisateur_id)
+    ) ENGINE=InnoDB`,
     // Connexion (et inscription) par lien envoyé par mail : un jeton à usage unique, valable
     // 20 minutes, par demande. Seul le hachage est stocké (le lien envoyé contient le jeton en
     // clair). Un jeton de connexion porte utilisateur_id (compte déjà existant) ; un jeton
@@ -318,6 +331,69 @@ async function creerSchema(pool: Pool) {
 }
 
 const maintenant = () => new Date().toISOString();
+
+// Mode démonstration : connexion en choisissant un compte fictif (sans mot de passe) et jeu de
+// comptes fictifs sur une base vide. Actif par défaut en développement (npm run dev), jamais en
+// production sauf MODE_DEMO=1 explicite dans .env.local (MODE_DEMO=0 le coupe aussi en local).
+export function modeDemo(): boolean {
+  if (process.env.MODE_DEMO === "1") return true;
+  if (process.env.MODE_DEMO === "0") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
+// Premier administrateur d'une installation neuve (ADMIN_EMAIL dans .env.local) : sans lui,
+// personne ne pourrait se connecter, puisque les comptes ne sont créés que par l'administrateur.
+// Sans effet dès qu'un administrateur existe ; un compte déjà présent avec cette adresse est
+// promu administrateur plutôt que recréé.
+async function creerAdministrateurInitial(pool: Pool) {
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (!email) return;
+  const [admins] = await pool.query("SELECT 1 FROM utilisateurs WHERE role = 'admin' AND actif = 1");
+  if ((admins as unknown[]).length > 0) return;
+  const [existants] = await pool.query("SELECT id FROM utilisateurs WHERE LOWER(email) = ?", [email]);
+  const existant = (existants as { id: string }[])[0];
+  if (existant) {
+    await pool.query(
+      "UPDATE utilisateurs SET role = 'admin', annee_but = NULL, parcours = NULL, referent_id = NULL, actif = 1 WHERE id = ?",
+      [existant.id],
+    );
+    return;
+  }
+  await pool.query(
+    `INSERT INTO utilisateurs (id, nom, prenom, email, role, pref_courriel)
+     VALUES (?, ?, ?, ?, 'admin', 'aucun')`,
+    [`ens-${randomUUID().slice(0, 8)}`, process.env.ADMIN_NOM?.trim() || "Administrateur", process.env.ADMIN_PRENOM?.trim() || "Folio GEA", email],
+  );
+}
+
+// ---------- Sessions ----------
+
+export async function enregistrerSession(jetonHash: string, utilisateurId: string, expireLe: string) {
+  const pool = await obtenirPool();
+  // Ménage au passage : les sessions expirées ne servent plus à rien.
+  await pool.query("DELETE FROM sessions WHERE expire_le < ?", [maintenant()]);
+  await pool.query("INSERT INTO sessions (jeton_hash, utilisateur_id, cree_le, expire_le) VALUES (?, ?, ?, ?)", [
+    jetonHash,
+    utilisateurId,
+    maintenant(),
+    expireLe,
+  ]);
+}
+
+export async function utilisateurDeSession(jetonHash: string): Promise<Utilisateur | undefined> {
+  const pool = await obtenirPool();
+  const [lignes] = await pool.query(
+    `SELECT u.* FROM sessions s JOIN utilisateurs u ON u.id = s.utilisateur_id
+     WHERE s.jeton_hash = ? AND s.expire_le > ?`,
+    [jetonHash, maintenant()],
+  );
+  return (lignes as Utilisateur[])[0];
+}
+
+export async function supprimerSession(jetonHash: string) {
+  const pool = await obtenirPool();
+  await pool.query("DELETE FROM sessions WHERE jeton_hash = ?", [jetonHash]);
+}
 
 export function cheminFichier(traceId: string) {
   return path.join(DOSSIER_FICHIERS, `${traceId}.pdf`);
@@ -946,6 +1022,7 @@ export async function supprimerEtudiant(id: string) {
     // Notifications de son référent qui pointaient vers ce portfolio.
     await conn.query("DELETE FROM notifications WHERE lien LIKE CONCAT('/portfolio/', ?, '%')", [id]);
     await conn.query("DELETE FROM courriels WHERE destinataire_id = ?", [id]);
+    await conn.query("DELETE FROM sessions WHERE utilisateur_id = ?", [id]);
     await conn.query("DELETE FROM utilisateurs WHERE id = ? AND role = 'etudiant'", [id]);
     await conn.commit();
   } catch (e) {
@@ -970,6 +1047,7 @@ export async function supprimerEnseignant(id: string): Promise<boolean> {
     await conn.query("DELETE FROM consultations WHERE enseignant_id = ?", [id]);
     await conn.query("DELETE FROM notifications WHERE destinataire_id = ?", [id]);
     await conn.query("DELETE FROM courriels WHERE destinataire_id = ?", [id]);
+    await conn.query("DELETE FROM sessions WHERE utilisateur_id = ?", [id]);
     await conn.query("DELETE FROM utilisateurs WHERE id = ? AND role <> 'etudiant'", [id]);
     await conn.commit();
   } catch (e) {

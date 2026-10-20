@@ -18,7 +18,11 @@ npm run dev
 
 Ouvrir ensuite http://localhost:3000.
 
-Au premier démarrage, l'application crée les tables puis les remplit avec un jeu de démonstration de 3 enseignants (dont une administratrice) et 12 étudiants répartis en BUT1, BUT2 et BUT3, dont 2 en GPRH (Sarah Benali, Maxime Laurent) et 2 en GC2F (Julie Perrin, Antoine Masson). Les PDF déposés restent stockés localement dans le dossier `data/fichiers/`. Pour repartir de zéro, vider la base (`DROP DATABASE` puis relancer) et supprimer le dossier `data/`.
+Au premier démarrage **en local** (`npm run dev`, mode démonstration), l'application crée les tables puis les remplit avec un jeu de démonstration de 3 enseignants (dont une administratrice) et 12 étudiants répartis en BUT1, BUT2 et BUT3, dont 2 en GPRH (Sarah Benali, Maxime Laurent) et 2 en GC2F (Julie Perrin, Antoine Masson). Les PDF déposés restent stockés localement dans le dossier `data/fichiers/`. Pour repartir de zéro, vider la base (`DROP DATABASE` puis relancer) et supprimer le dossier `data/`.
+
+**Sécurité des connexions** : une fois connecté·e, le navigateur ne garde qu'un jeton de session aléatoire (cookie `folio_session`), jamais l'identifiant du compte ; la base n'en conserve que l'empreinte (table `sessions`, valable 7 jours). Se déconnecter, supprimer ou désactiver le compte le rend aussitôt inutilisable. Le cookie est réservé au HTTPS dès que `APP_BASE_URL` commence par `https://`.
+
+**Mode démonstration** (comptes fictifs, connexion en choisissant un compte sans mot de passe) : actif d'office en local, **jamais en production** sauf `MODE_DEMO=1` dans `.env.local`. Sur un serveur, une base neuve reste donc vide : renseigner `ADMIN_EMAIL` (votre adresse) pour que le premier compte administrateur soit créé au démarrage, puis importer les étudiants et enseignants.
 
 ## Fonctionnalités
 

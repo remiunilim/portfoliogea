@@ -1,6 +1,5 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import {
@@ -46,7 +45,7 @@ import {
 import { analyserImport, appliquerImport, lireFichier, PARCOURS_GEA, type LigneApercu } from "@/lib/import-etudiants";
 import { consommerJetonInscription, emailDuJetonInscription, envoyerLienConnexion } from "@/lib/lien-connexion";
 import { appliquerImportZip } from "@/lib/transfert";
-import { COOKIE_SESSION, estAdmin, estEnseignant, peutModifier, suitEtudiant, utilisateurCourant } from "@/lib/session";
+import { estAdmin, estEnseignant, fermerSession, ouvrirSession, peutModifier, suitEtudiant, utilisateurCourant } from "@/lib/session";
 import {
   competenceParCode,
   estAnneeBUT,
@@ -68,7 +67,7 @@ const nbMots = (t: string) => (t ? t.split(/\s+/).length : 0);
 // ---------- Connexion par lien envoyé par mail ----------
 
 export async function seDeconnecter() {
-  (await cookies()).delete(COOKIE_SESSION);
+  await fermerSession();
   redirect("/connexion");
 }
 
@@ -131,7 +130,7 @@ export async function creerProfilEtudiantAction(_: EtatFormulaire, formData: For
     detail: `${prenom} ${nom} (BUT${annee}) a créé son profil et vous a choisi·e comme référent·e.`,
     lien: `/portfolio/${id}`,
   });
-  (await cookies()).set(COOKIE_SESSION, id, { httpOnly: true, sameSite: "lax", path: "/" });
+  await ouvrirSession(id);
   redirect(`/portfolio/${id}`);
 }
 

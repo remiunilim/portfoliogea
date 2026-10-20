@@ -74,6 +74,7 @@ Voir `PASSATION-CLAUDE.md` de la branche `main` pour l'historique complet avant 
 | --- | --- |
 | 18/10/2026 | Création de la branche `ovh` (worktree séparé) : connexion par lien mail, SSO et mot de passe transitoire retirés ; message « contactez votre référent » ajouté si rien n'arrive ; auto-inscription étudiante ajoutée (vérification d'email avant création du compte), restreinte à `unilim.fr` |
 | 19/10/2026 | Correction « le lien du mail renvoie vers localhost » : tous les liens absolus (lien de connexion, redirection après clic, liens des courriels de notification) partent de `APP_BASE_URL` (`src/lib/url-publique.ts`), avec un message d'erreur dans le journal du service si elle vaut encore `localhost` en production |
+| 20/10/2026 | Sécurisation des connexions (commune avec `main`) : cookie de session aléatoire adossé à une table `sessions` au lieu de l'identifiant du compte (falsifiable), mode démonstration coupé en production (`MODE_DEMO`), premier administrateur via `ADMIN_EMAIL`. Le déploiement de cette version déconnecte tout le monde une fois |
 
 ## 8. Reste à faire
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connecterAvecJeton } from "@/lib/lien-connexion";
-import { COOKIE_SESSION } from "@/lib/session";
+import { COOKIE_SESSION, creerSession, optionsCookieSession } from "@/lib/session";
 import { urlPublique } from "@/lib/url-publique";
 
 // Clic sur le lien reçu par mail : valide le jeton (existe, non expiré, non déjà utilisé) et ouvre
@@ -20,6 +20,6 @@ export async function GET(requete: Request) {
 
   const destination = compte.role === "etudiant" ? `/portfolio/${compte.id}` : "/enseignant";
   const reponse = NextResponse.redirect(new URL(destination, base));
-  reponse.cookies.set(COOKIE_SESSION, compte.id, { httpOnly: true, sameSite: "lax", path: "/" });
+  reponse.cookies.set(COOKIE_SESSION, await creerSession(compte.id), optionsCookieSession());
   return reponse;
 }
